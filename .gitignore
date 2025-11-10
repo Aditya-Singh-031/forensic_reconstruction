@@ -1,0 +1,24 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Other (add any large data files you don't want to track)
+*.mp3
+*.onnx
+*.jpeg
+*.png
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.ico
+*.svg
+*.heic
+*.heif
+*.heif-srgb
+# Project Folders
+models/
+output/
+logs/

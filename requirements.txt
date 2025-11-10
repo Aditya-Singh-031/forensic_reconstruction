@@ -1,0 +1,58 @@
+# Core Deep Learning Frameworks
+# Note: Install PyTorch separately based on CUDA version (see setup instructions)
+# torch>=2.0.0
+# torchvision>=0.15.0
+# torchaudio>=2.0.0
+
+# Face Segmentation (BiSeNet)
+timm>=0.9.0
+
+# Landmark Detection
+mediapipe>=0.10.0
+
+# Image Processing
+opencv-python>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+scipy>=1.11.0
+
+# Image Inpainting (Stable Diffusion)
+diffusers>=0.21.0
+transformers>=4.30.0
+accelerate>=0.20.0
+safetensors>=0.3.0
+
+# Text Encoding (OpenAI CLIP)
+#clip-by-openai>=1.0
+open-clip-torch>=2.20.0
+
+# 3D Face Processing
+#pytorch3d>=0.7.4
+
+# Face Recognition (ArcFace)
+# Note: May need to install insightface separately
+onnxruntime>=1.15.0
+onnx>=1.14.0
+
+# Speech Recognition
+google-cloud-speech>=2.19.0
+librosa>=0.10.0
+
+# API Server
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6
+
+# Database Search
+# Note: Use faiss-gpu if CUDA available, otherwise faiss-cpu
+# faiss-cpu>=1.7.4
+# faiss-gpu>=1.7.4
+
+# NLP
+spacy>=3.6.0
+
+# Utilities
+requests>=2.31.0
+tqdm>=4.65.0
+matplotlib>=3.7.0
+scikit-learn>=1.3.0
