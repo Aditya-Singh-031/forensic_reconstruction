@@ -1,0 +1,23 @@
+# Sample face descriptions for text-to-face generation
+# One per line; lines starting with # are ignored.
+
+Adult male, 45 years old, thick mustache, large ears, dark complexion, photorealistic, natural lighting
+Young female, 22 years old, fair skin, long straight black hair, smiling, photorealistic, studio lighting
+Middle-aged Indian male, wheatish complexion, short wavy hair, rectangular glasses, neutral expression
+Elderly woman, 70 years old, deep wrinkles, grey curly hair, gentle smile, high detail
+Teenage boy, 16 years old, freckles, short blonde hair, slight smirk, natural look
+Adult female, 35, South Asian, medium brown skin, nose ring, subtle makeup, soft lighting
+Adult male, 30, East Asian, short black hair, no facial hair, serious expression, cinematic lighting
+Adult male, 28, thick black beard, shaved head, strong jawline, dark eyebrows
+Adult female, 40, African descent, dark skin, braided hair, confident expression
+Adult male, 50, Middle Eastern, salt-and-pepper beard, prominent nose, kind eyes
+Adult female, 25, light brown skin, bob haircut, mole above lip, smiling
+Adult male, 33, Indian, thick mustache, medium-length hair, piercing eyes, photorealistic
+Adult female, 45, South Indian, bindi, jasmine flowers in hair, traditional look, natural lighting
+Adult male, 38, Sikh, neatly tied turban, trimmed beard, dignified expression
+Adult male, 27, scar across left cheek, stubble beard, intense gaze, cinematic
+Adult female, 32, round glasses, bangs, fair skin, slight smile, soft light
+Adult male, 41, narrow eyes, wide nose, thick eyebrows, neutral expression
+Adult female, 29, freckles, red hair, high cheekbones, subtle smile, high detail
+Adult male, 35, dark complexion, large ears, thin mustache, neutral face
+Adult female, 50, Indian, medium brown skin, saree pallu visible, gentle smile, photorealistic
