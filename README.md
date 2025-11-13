@@ -66,29 +66,29 @@ Output: Ranked suspect profiles with similarity scores
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │         PREPROCESSING MODULES                               │
-│  ├─ Voice Processor (Whisper)                              │
-│  ├─ Description Parser (NLP)                               │
-│  └─ Segmentation & Landmarks (MediaPipe)                   │
+│  ├─ Voice Processor (Whisper)                               │
+│  ├─ Description Parser (NLP)                                │
+│  └─ Segmentation & Landmarks (MediaPipe)                    │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │         GENERATION & REFINEMENT                             │
-│  ├─ Text-to-Face Generator (Stable Diffusion)              │
-│  ├─ Iterative Refinement Engine                            │
-│  ├─ Face Inpainter (Stable Diffusion Inpaint)              │
-│  └─ Mask Generator (SegFormer)                             │
+│  ├─ Text-to-Face Generator (Stable Diffusion)               │
+│  ├─ Iterative Refinement Engine                             │
+│  ├─ Face Inpainter (Stable Diffusion Inpaint)               │
+│  └─ Mask Generator (SegFormer)                              │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │         DATABASE & MATCHING                                 │
-│  ├─ Multi-Face Database (SQLite)                           │
-│  ├─ Embedding Generator (CLIP)                             │
-│  └─ Advanced Matching Engine (Hybrid Scoring)              │
+│  ├─ Multi-Face Database (SQLite)                            │
+│  ├─ Embedding Generator (CLIP)                              │
+│  └─ Advanced Matching Engine (Hybrid Scoring)               │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │              OUTPUT LAYER                                   │
-│  (Ranked Results / Visualizations / Metadata)              │
+│  (Ranked Results / Visualizations / Metadata)               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
