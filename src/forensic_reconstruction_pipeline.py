@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Dict, Optional
 import argparse
 import json
-
+from PIL import Image
+import os
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,6 +71,9 @@ class ForensicReconstructionPipeline:
         Returns:
             Pipeline results dictionary
         """
+        from PIL import Image
+        from pathlib import Path
+
         logger.info("\n" + "="*60)
         logger.info("PROCESSING WITNESS DESCRIPTION")
         logger.info("="*60)
@@ -88,9 +92,11 @@ class ForensicReconstructionPipeline:
         results['parsed_attributes'] = parsed['attributes']
         logger.info(f"  ✓ Confidence: {parsed['overall_confidence']:.2f}")
         
-        # STEP 2: Generate faces
         logger.info(f"\n[2/5] Generating {num_faces} face(s)...")
         generated_images = []
+        output_dir = Path('output/pipeline_generated_faces')
+        output_dir.mkdir(parents=True, exist_ok=True)
+
         for i in range(num_faces):
             logger.info(f"  Generating face {i+1}/{num_faces}...")
             img = self.generator.generate(
@@ -99,12 +105,18 @@ class ForensicReconstructionPipeline:
                 guidance_scale=7.5,
                 seed=42 + i  # Different seed for each face
             )
-            generated_images.append(img)
-            logger.info(f"    ✓ Face {i+1} generated")
-
-        results['generated_faces'] = generated_images
-        logger.info(f"  ✓ Generated {len(generated_images)} faces")
-
+            
+            # Save the generated image
+            img_path = output_dir / f"generated_face_{i:02d}.png"
+            if isinstance(img, Image.Image):
+                img.save(str(img_path))
+            else:
+                # If it's numpy array
+                from PIL import Image
+                Image.fromarray(img).save(str(img_path))
+            
+            generated_images.append(str(img_path))
+            logger.info(f"    ✓ Face {i+1} generated and saved")
 
         results['generated_faces'] = generated_images
         logger.info(f"  ✓ Generated {len(generated_images)} faces")
@@ -143,12 +155,24 @@ class ForensicReconstructionPipeline:
                     )
                     mask = mg.generate([feature], margin_px=5, feather_px=2)
                     
+                    # Load image as PIL Image
+                    from PIL import Image as PILImage
+                    img_pil = PILImage.open(str(img_path))
+
                     # Inpaint
                     refined = self.inpainter.inpaint(
-                        str(img_path),
+                        img_pil,  # Pass PIL Image, not string path
                         mask,
                         prompt=f"high quality {feature}, realistic, detailed"
                     )
+
+                    # Save refined image
+                    refined_path = output_dir / f"refined_{feature}_{i:02d}.png"
+                    if isinstance(refined, PILImage.Image):
+                        refined.save(str(refined_path))
+                    else:
+                        PILImage.fromarray(refined).save(str(refined_path))
+
                     
                     results['refined_faces'].append({
                         'original': img_path,
