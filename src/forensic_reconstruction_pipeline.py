@@ -90,12 +90,21 @@ class ForensicReconstructionPipeline:
         
         # STEP 2: Generate faces
         logger.info(f"\n[2/5] Generating {num_faces} face(s)...")
-        generated_images = self.generator.generate(
-            description,
-            num_images=num_faces,  # Check actual parameter name in TextToFaceGenerator
-            steps=30,
-            guidance_scale=7.5
-        )
+        generated_images = []
+        for i in range(num_faces):
+            logger.info(f"  Generating face {i+1}/{num_faces}...")
+            img = self.generator.generate(
+                description,
+                num_inference_steps=30,
+                guidance_scale=7.5,
+                seed=42 + i  # Different seed for each face
+            )
+            generated_images.append(img)
+            logger.info(f"    ✓ Face {i+1} generated")
+
+        results['generated_faces'] = generated_images
+        logger.info(f"  ✓ Generated {len(generated_images)} faces")
+
 
         results['generated_faces'] = generated_images
         logger.info(f"  ✓ Generated {len(generated_images)} faces")
