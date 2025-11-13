@@ -173,10 +173,16 @@ class ForensicDescriptionParser:
     
     def _extract_gender(self, text: str) -> Dict:
         """Extract gender."""
-        for gender, keywords in self.gender_keywords.items():
-            for keyword in keywords:
-                if keyword in text:
-                    return {'value': gender, 'confidence': 0.95}
+        # Check female first (more specific)
+        for keyword in self.gender_keywords.get('female', []):
+            if keyword in text:
+                return {'value': 'female', 'confidence': 0.95}
+        
+        # Then check male
+        for keyword in self.gender_keywords.get('male', []):
+            if keyword in text:
+                return {'value': 'male', 'confidence': 0.95}
+        
         return {'value': None, 'confidence': 0.0}
     
     def _extract_complexion(self, text: str) -> Dict:
