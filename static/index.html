@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forensic Facial Reconstruction</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="file"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102,126,234,0.3);
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .results {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .result-item {
+            background: white;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #28a745;
+        }
+
+        .result-item strong {
+            color: #333;
+        }
+
+        .result-item span {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 15px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #999;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .stat-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Forensic Facial Reconstruction System</h1>
+            <p class="subtitle">AI-powered face generation from witness descriptions</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('generate')">Generate</button>
+            <button class="tab-button" onclick="switchTab('refine')">Refine</button>
+            <button class="tab-button" onclick="switchTab('search')">Search</button>
+            <button class="tab-button" onclick="switchTab('pipeline')">Pipeline</button>
+            <button class="tab-button" onclick="switchTab('database')">Database</button>
+        </div>
+
+        <!-- GENERATE TAB -->
+        <div id="generate" class="tab-content active">
+            <div class="grid">
+                <div class="card">
+                    <h2>Generate Face</h2>
+                    <form onsubmit="generateFace(event)">
+                        <div class="form-group">
+                            <label>Description:</label>
+                            <textarea id="description" placeholder="e.g., Adult male, 40 years old, thick mustache, Indian complexion" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Number of Faces:</label>
+                            <input type="number" id="num_faces" min="1" max="5" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Inference Steps:</label>
+                            <input type="number" id="steps" min="20" max="50" value="30">
+                        </div>
+                        <div class="form-group">
+                            <label>Guidance Scale:</label>
+                            <input type="number" id="guidance" min="5" max="15" step="0.5" value="7.5">
+                        </div>
+                        <button type="submit">Generate Face</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>Results</h2>
+                    <div id="generateLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Generating...</p>
+                    </div>
+                    <div id="generateResults" class="results"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- REFINE TAB -->
+        <div id="refine" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>Refine Features</h2>
+                    <form onsubmit="refineFeature(event)">
+                        <div class="form-group">
+                            <label>Base Description:</label>
+                            <textarea id="baseDescription" placeholder="Starting face description" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Feature Category:</label>
+                            <select id="category" onchange="updateRefinementOptions()">
+                                <option value="mustache">Mustache</option>
+                                <option value="beard">Beard</option>
+                                <option value="eyes">Eyes</option>
+                                <option value="hair">Hair</option>
+                                <option value="skin">Skin</option>
+                                <option value="face_shape">Face Shape</option>
+                                <option value="nose">Nose</option>
+                                <option value="mouth">Mouth</option>
+                                <option value="overall">Overall</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Refinement Type:</label>
+                            <select id="refinementType"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Intensity:</label>
+                            <input type="number" id="intensity" min="0.5" max="2" step="0.1" value="1.0">
+                        </div>
+                        <button type="submit">Apply Refinement</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>Refinement Results</h2>
+                    <div id="refineLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Refining...</p>
+                    </div>
+                    <div id="refineResults" class="results"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SEARCH TAB -->
+        <div id="search" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>Search Database</h2>
+                    <form onsubmit="searchDatabase(event)">
+                        <div class="form-group">
+                            <label>Query Description:</label>
+                            <textarea id="queryDescription" placeholder="Describe the person you're looking for" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Top K Results:</label>
+                            <input type="number" id="topK" min="1" max="50" value="10">
+                        </div>
+                        <div class="form-group">
+                            <label>Similarity Threshold:</label>
+                            <input type="number" id="threshold" min="0" max="1" step="0.1" value="0.6">
+                        </div>
+                        <button type="submit">Search</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>Search Results</h2>
+                    <div id="searchLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Searching...</p>
+                    </div>
+                    <div id="searchResults" class="results"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PIPELINE TAB -->
+        <div id="pipeline" class="tab-content">
+            <div class="card">
+                <h2>Complete Pipeline</h2>
+                <form onsubmit="runPipeline(event)">
+                    <div class="form-group">
+                        <label>Description:</label>
+                        <textarea id="pipelineDescription" placeholder="Enter witness description" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Number of Faces:</label>
+                        <input type="number" id="pipelineNumFaces" min="1" max="5" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="pipelineRefine">
+                            Apply Feature Refinement
+                        </label>
+                    </div>
+                    <button type="submit">Run Full Pipeline</button>
+                </form>
+                
+                <div id="pipelineLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Processing...</p>
+                </div>
+                <div id="pipelineResults" class="results"></div>
+            </div>
+        </div>
+
+        <!-- DATABASE TAB -->
+        <div id="database" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>Database Statistics</h2>
+                    <button onclick="getStats()">Get Statistics</button>
+                    <div id="statsLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading...</p>
+                    </div>
+                    <div id="statsResults" class="stats-grid"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Database Management</h2>
+                    <button onclick="exportDatabase()">Export Database</button>
+                    <div id="exportLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Exporting...</p>
+                    </div>
+                    <div id="exportResults" class="results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/api/v1';
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function generateFace(e) {
+            e.preventDefault();
+
+            const description = document.getElementById('description').value;
+            const num_faces = parseInt(document.getElementById('num_faces').value);
+            const steps = parseInt(document.getElementById('steps').value);
+            const guidance = parseFloat(document.getElementById('guidance').value);
+
+            showLoading('generateLoading');
+            hideResults('generateResults');
+
+            try {
+                const response = await fetch(`${API_URL}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        description,
+                        num_faces,
+                        num_inference_steps: steps,
+                        guidance_scale: guidance
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult('generateResults', `
+                        <div class="status success">✓ Generated ${data.count} face(s) successfully</div>
+                        ${data.images.map(img => `
+                            <div class="result-item">
+                                <strong>Face ${img.index + 1}</strong><br>
+                                <img src="${img.url}" class="image-preview" alt="Generated face">
+                            </div>
+                        `).join('')}
+                    `);
+                } else {
+                    showResult('generateResults', `<div class="status error">Error: ${data.detail}</div>`);
+                }
+            } catch (error) {
+                showResult('generateResults', `<div class="status error">Error: ${error.message}</div>`);
+            } finally {
+                hideLoading('generateLoading');
+            }
+        }
+
+        async function searchDatabase(e) {
+            e.preventDefault();
+
+            const description = document.getElementById('queryDescription').value;
+            const top_k = parseInt(document.getElementById('topK').value);
+            const threshold = parseFloat(document.getElementById('threshold').value);
+
+            showLoading('searchLoading');
+            hideResults('searchResults');
+
+            try {
+                const response = await fetch(`${API_URL}/database/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description, top_k, threshold })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult('searchResults', `
+                        <div class="status success">✓ Found ${data.matches_found} matches</div>
+                        ${data.results.map(result => `
+                            <div class="result-item">
+                                <strong>[${result.rank}] ${result.record_id}</strong><br>
+                                Score: ${result.similarity_score.toFixed(3)}<br>
+                                <span>${result.description}</span>
+                            </div>
+                        `).join('')}
+                    `);
+                } else {
+                    showResult('searchResults', `<div class="status error">Error: ${data.detail}</div>`);
+                }
+            } catch (error) {
+                showResult('searchResults', `<div class="status error">Error: ${error.message}</div>`);
+            } finally {
+                hideLoading('searchLoading');
+            }
+        }
+
+        async function getStats() {
+            showLoading('statsLoading');
+            document.getElementById('statsResults').innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_URL}/database/stats`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('statsResults').innerHTML = `
+                        <div class="stat-box">
+                            <div class="stat-number">${data.total_faces}</div>
+                            <div class="stat-label">Total Faces</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">${data.total_embeddings}</div>
+                            <div class="stat-label">Embeddings</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">${data.faces_with_attributes}</div>
+                            <div class="stat-label">With Attributes</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">${data.database_size_mb.toFixed(2)} MB</div>
+                            <div class="stat-label">Database Size</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                hideLoading('statsLoading');
+            }
+        }
+
+        function showLoading(elementId) {
+            document.getElementById(elementId).classList.add('active');
+        }
+
+        function hideLoading(elementId) {
+            document.getElementById(elementId).classList.remove('active');
+        }
+
+        function showResult(elementId, html) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = html;
+            element.classList.add('active');
+        }
+
+        function hideResults(elementId) {
+            document.getElementById(elementId).classList.remove('active');
+        }
+
+        // Initialize refinement options
+        function updateRefinementOptions() {
+            const category = document.getElementById('category').value;
+            const options = {
+                'mustache': ['thicker', 'thinner', 'darker', 'lighter', 'different_style', 'remove'],
+                'beard': ['thicker', 'thinner', 'longer', 'shorter', 'different_style', 'remove'],
+                'eyes': ['larger', 'smaller', 'different_color', 'more_detailed', 'different_expression'],
+                'hair': ['longer', 'shorter', 'different_color', 'different_style', 'more_volume', 'receding'],
+                'skin': ['darker', 'lighter', 'smoother', 'more_detail', 'add_scars', 'add_wrinkles'],
+                'face_shape': ['wider', 'narrower', 'rounder', 'squarer', 'longer', 'younger', 'older'],
+                'nose': ['larger', 'smaller', 'broader', 'narrower', 'more_detail'],
+                'mouth': ['larger', 'smaller', 'fuller_lips', 'thinner_lips', 'different_expression'],
+                'overall': ['more_realistic', 'better_lighting', 'higher_quality', 'professional_look', 'casual_look']
+            };
+
+            const select = document.getElementById('refinementType');
+            select.innerHTML = options[category].map(opt => 
+                `<option value="${opt}">${opt.replace(/_/g, ' ')}</option>`
+            ).join('');
+        }
+
+        updateRefinementOptions();
+    </script>
+</body>
+</html>
