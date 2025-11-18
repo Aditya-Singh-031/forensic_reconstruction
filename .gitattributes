@@ -1,0 +1,7 @@
+# Large file tracking for dataset
+dataset/raw_images/**/*.png filter=lfs diff=lfs merge=lfs -text
+dataset/raw_images/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+dataset/features/**/*.png filter=lfs diff=lfs merge=lfs -text
+dataset/features/**/*.npy filter=lfs diff=lfs merge=lfs -text
+dataset/metadata/**/*.json filter=lfs diff=lfs merge=lfs -text
+dataset/annotations/**/*.csv filter=lfs diff=lfs merge=lfs -text
