@@ -40,6 +40,20 @@ class CorruptionEngine:
         "ears_left",
         "ears_right",
     ]
+    
+    # Mapping from landmark detector names to our feature names
+    LANDMARK_TO_FEATURE_MAP = {
+        "left_eye": "eyes_left",
+        "right_eye": "eyes_right",
+        "left_eyebrow": "eyebrows_left",
+        "right_eyebrow": "eyebrows_right",
+        "nose_tip": "nose",
+        "nose_base": "nose",
+        "mouth_outer": "mouth_outer",
+        "mouth_inner": "mouth_inner",
+        "left_ear": "ears_left",
+        "right_ear": "ears_right",
+    }
 
     def __init__(
         self,
@@ -68,6 +82,9 @@ class CorruptionEngine:
 
         # Initialize random generator
         self.random_gen = random.Random(42)
+        
+        # Cache for landmark detections (bboxes per image)
+        self.bbox_cache: Dict[str, Dict[str, Dict[str, int]]] = {}
 
     def load_feature_with_mask(
         self, feature_id: str, feature_type: str
@@ -186,17 +203,15 @@ class CorruptionEngine:
         self,
         base_image: Image.Image,
         feature_rgba: Image.Image,
-        feature_id: str,
-        feature_type: str,
+        target_bbox: Dict[str, int],
     ) -> Image.Image:
         """
-        Composite feature onto base image at correct position.
+        Composite feature onto base image at target bbox position.
 
         Args:
             base_image: Base face_contour image (RGB)
-            feature_rgba: Feature image with alpha channel (RGBA)
-            feature_id: ID of the feature (for bbox lookup)
-            feature_type: Type of feature
+            feature_rgba: Feature image with alpha channel (RGBA) - will be resized to target bbox
+            target_bbox: Target bbox dict with keys: x_min, y_min, x_max, y_max
 
         Returns:
             Composite image (RGB)
@@ -204,41 +219,29 @@ class CorruptionEngine:
         # Convert base to RGBA for compositing
         base_rgba = base_image.convert("RGBA")
 
-        # Get bbox from feature_index
-        entry = self.feature_index.get(feature_id, {})
-        bboxes = entry.get("bboxes", {})
+        # Extract bbox coordinates
+        x_min = target_bbox.get("x_min", 0)
+        y_min = target_bbox.get("y_min", 0)
+        x_max = target_bbox.get("x_max", base_image.width)
+        y_max = target_bbox.get("y_max", base_image.height)
 
-        # Try to get bbox for this feature
-        bbox = bboxes.get(feature_type)
+        # Calculate target size
+        bbox_width = x_max - x_min
+        bbox_height = y_max - y_min
 
-        if bbox and isinstance(bbox, dict):
-            # Use bbox position
-            x_min = bbox.get("x_min", 0)
-            y_min = bbox.get("y_min", 0)
-            x_max = bbox.get("x_max", base_image.width)
-            y_max = bbox.get("y_max", base_image.height)
-
-            # Resize feature to bbox size
-            bbox_width = x_max - x_min
-            bbox_height = y_max - y_min
-
-            if bbox_width > 0 and bbox_height > 0:
-                feature_resized = feature_rgba.resize(
-                    (bbox_width, bbox_height), Image.Resampling.LANCZOS
-                )
-                # Paste at bbox position
-                base_rgba.paste(feature_resized, (x_min, y_min), feature_resized)
-            else:
-                logger.warning(
-                    "Invalid bbox for %s/%s: %s", feature_id, feature_type, bbox
-                )
-                # Fallback: center placement
-                self._paste_centered(base_rgba, feature_rgba)
-        else:
-            # No bbox available - use center placement as fallback
-            logger.debug(
-                "No bbox for %s/%s, using center placement", feature_id, feature_type
+        if bbox_width > 0 and bbox_height > 0:
+            # Resize sampled feature to match target bbox size
+            feature_resized = feature_rgba.resize(
+                (bbox_width, bbox_height), Image.Resampling.LANCZOS
             )
+            # Paste at target bbox position
+            base_rgba.paste(feature_resized, (x_min, y_min), feature_resized)
+        else:
+            logger.warning(
+                "Invalid target bbox: x_min=%d, y_min=%d, x_max=%d, y_max=%d",
+                x_min, y_min, x_max, y_max
+            )
+            # Fallback: center placement
             self._paste_centered(base_rgba, feature_rgba)
 
         # Convert back to RGB
@@ -316,12 +319,77 @@ class CorruptionEngine:
         corruption_mask = Image.new("L", base_image.size, 0)
         corruption_mask_array = np.array(corruption_mask)
 
+        # Get TARGET bboxes from face_contour_id's feature_index
+        # First try to get from stored bboxes (if available)
+        raw_bboxes = entry.get("bboxes", {})
+        target_bboxes = {}
+        
+        # Map landmark detector names to our feature names
+        for landmark_name, bbox in raw_bboxes.items():
+            if bbox and isinstance(bbox, dict):
+                mapped_name = self.LANDMARK_TO_FEATURE_MAP.get(landmark_name)
+                if mapped_name:
+                    target_bboxes[mapped_name] = bbox
+                # Also handle direct matches (in case some are already mapped)
+                elif landmark_name in self.CORRUPTIBLE_FEATURES:
+                    target_bboxes[landmark_name] = bbox
+        
+        # If bboxes not available, detect from jawline (ground truth) image
+        if not target_bboxes:
+            # Check cache first
+            if face_contour_id in self.bbox_cache:
+                target_bboxes = self.bbox_cache[face_contour_id]
+            else:
+                features = entry.get("features", {})
+                jawline_path = features.get("jawline")
+                if jawline_path and Path(jawline_path).exists():
+                    try:
+                        # Use landmark detector to get bboxes from original image
+                        # Import directly to avoid package __init__ issues
+                        import importlib.util
+                        from pathlib import Path as PathLib
+                        landmark_detector_path = PathLib(__file__).parent / "landmark_detector.py"
+                        spec = importlib.util.spec_from_file_location("landmark_detector", landmark_detector_path)
+                        landmark_detector_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(landmark_detector_module)
+                        LandmarkDetector = landmark_detector_module.LandmarkDetector
+                        detector = LandmarkDetector()
+                        result = detector.detect(str(jawline_path), return_groups=True, return_visualization=False)
+                        groups = result.get("groups", {})
+                        
+                        # Map landmark detector groups to our feature names
+                        detected_bboxes = {}
+                        for landmark_name, group_data in groups.items():
+                            mapped_name = self.LANDMARK_TO_FEATURE_MAP.get(landmark_name)
+                            if mapped_name and mapped_name in self.CORRUPTIBLE_FEATURES:
+                                bbox = group_data.get("bbox")
+                                if bbox and isinstance(bbox, dict):
+                                    detected_bboxes[mapped_name] = bbox
+                        
+                        # Cache the results
+                        self.bbox_cache[face_contour_id] = detected_bboxes
+                        target_bboxes = detected_bboxes
+                    except Exception as e:
+                        logger.warning("Failed to detect landmarks for %s: %s", face_contour_id, e)
+                        # Cache empty dict to avoid repeated attempts
+                        self.bbox_cache[face_contour_id] = {}
+
         # Start with base image
         corrupted_image = base_image.copy()
 
         # Composite each sampled feature
         for feature_type, sampled_id in sampled_features:
-            # Load feature with mask
+            # Get TARGET bbox from face_contour_id (where feature should be placed)
+            target_bbox = target_bboxes.get(feature_type)
+            
+            if not target_bbox or not isinstance(target_bbox, dict):
+                logger.warning(
+                    "No target bbox for %s/%s on face %s, skipping",
+                    face_contour_id, feature_type, face_contour_id
+                )
+                continue
+
+            # Load random feature with mask (from sampled_id)
             feature_rgba = self.load_feature_with_mask(sampled_id, feature_type)
 
             if feature_rgba is None:
@@ -330,81 +398,31 @@ class CorruptionEngine:
                 )
                 continue
 
-            # Composite onto base
+            # Composite onto base using TARGET bbox (resize sampled feature to target size)
             corrupted_image = self.composite_feature_on_base(
-                corrupted_image, feature_rgba, sampled_id, feature_type
+                corrupted_image, feature_rgba, target_bbox
             )
 
-            # Update corruption mask
-            # Get the mask from the feature
-            masks = self.feature_index[sampled_id].get("masks", {})
-            mask_path = masks.get(feature_type)
+            # Update corruption mask using TARGET bbox
+            x_min = target_bbox.get("x_min", 0)
+            y_min = target_bbox.get("y_min", 0)
+            x_max = target_bbox.get("x_max", base_image.width)
+            y_max = target_bbox.get("y_max", base_image.height)
 
-            if mask_path and Path(mask_path).exists():
-                try:
-                    feature_mask = Image.open(mask_path).convert("L")
+            bbox_width = x_max - x_min
+            bbox_height = y_max - y_min
 
-                    # Get bbox for positioning
-                    entry_sampled = self.feature_index.get(sampled_id, {})
-                    bboxes = entry_sampled.get("bboxes", {})
+            if bbox_width > 0 and bbox_height > 0:
+                # Create a mask for the target bbox region (white = corrupted)
+                # We use the full bbox area as corrupted
+                y_end = min(y_min + bbox_height, corruption_mask_array.shape[0])
+                x_end = min(x_min + bbox_width, corruption_mask_array.shape[1])
 
-                    bbox = bboxes.get(feature_type)
-                    if bbox and isinstance(bbox, dict):
-                        x_min = bbox.get("x_min", 0)
-                        y_min = bbox.get("y_min", 0)
-                        x_max = bbox.get("x_max", base_image.width)
-                        y_max = bbox.get("y_max", base_image.height)
-
-                        bbox_width = x_max - x_min
-                        bbox_height = y_max - y_min
-
-                        if bbox_width > 0 and bbox_height > 0:
-                            # Resize mask to bbox size
-                            feature_mask_resized = feature_mask.resize(
-                                (bbox_width, bbox_height), Image.Resampling.LANCZOS
-                            )
-                            mask_array = np.array(feature_mask_resized)
-
-                            # Paste into corruption mask at bbox position
-                            y_end = min(y_min + bbox_height, corruption_mask_array.shape[0])
-                            x_end = min(x_min + bbox_width, corruption_mask_array.shape[1])
-
-                            if y_min < corruption_mask_array.shape[0] and x_min < corruption_mask_array.shape[1]:
-                                mask_crop = mask_array[
-                                    : y_end - y_min, : x_end - x_min
-                                ]
-                                corruption_mask_array[y_min:y_end, x_min:x_end] = np.maximum(
-                                    corruption_mask_array[y_min:y_end, x_min:x_end],
-                                    mask_crop,
-                                )
-                    else:
-                        # Fallback: center placement
-                        base_w, base_h = base_image.size
-                        feat_w, feat_h = feature_mask.size
-                        x = (base_w - feat_w) // 2
-                        y = (base_h - feat_h) // 2
-
-                        if x >= 0 and y >= 0:
-                            mask_array = np.array(feature_mask)
-                            y_end = min(y + feat_h, corruption_mask_array.shape[0])
-                            x_end = min(x + feat_w, corruption_mask_array.shape[1])
-
-                            if y < corruption_mask_array.shape[0] and x < corruption_mask_array.shape[1]:
-                                mask_crop = mask_array[
-                                    : y_end - y, : x_end - x
-                                ]
-                                corruption_mask_array[y:y_end, x:x_end] = np.maximum(
-                                    corruption_mask_array[y:y_end, x:x_end],
-                                    mask_crop,
-                                )
-
-                except Exception as e:
-                    logger.warning(
-                        "Failed to update corruption mask for %s/%s: %s",
-                        sampled_id,
-                        feature_type,
-                        e,
-                    )
+                if (y_min < corruption_mask_array.shape[0] and 
+                    x_min < corruption_mask_array.shape[1] and
+                    y_end > y_min and x_end > x_min):
+                    # Mark entire bbox region as corrupted
+                    corruption_mask_array[y_min:y_end, x_min:x_end] = 255
 
         # Convert corruption mask array back to Image
         corruption_mask = Image.fromarray(corruption_mask_array, mode="L")
