@@ -1,5 +1,5 @@
 """
-Dataset Indexer - Phase 1
+Dataset Indexer - Updated for your dataset path
 Creates fast lookup database for all extracted features
 Generates train/val/test splits
 """
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class DatasetIndexer:
     """Index all extracted features for fast training data access."""
     
-    def __init__(self, dataset_dir: str = "/DATA/facial_features_dataset"):
+    def __init__(self, dataset_dir: str = "/home/teaching/G14/forensic_reconstruction/dataset"):
         """Initialize indexer.
         
         Args:
@@ -203,6 +203,7 @@ class DatasetIndexer:
             filename: Output filename
         """
         output_path = self.metadata_dir / filename
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"\nSaving index to {output_path}...")
         
@@ -283,7 +284,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="Index facial features dataset")
     parser.add_argument("--dataset-dir", type=str, 
-                       default="/DATA/facial_features_dataset",
+                       default="/home/teaching/G14/forensic_reconstruction/dataset",
                        help="Dataset root directory")
     parser.add_argument("--train-ratio", type=float, default=0.8,
                        help="Training split ratio")
