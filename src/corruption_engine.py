@@ -12,7 +12,7 @@ import json
 import logging
 import random
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -74,7 +74,7 @@ class CorruptionEngine:
         # Load feature index
         logger.info("Loading feature index from %s", self.feature_index_path)
         with self.feature_index_path.open("r", encoding="utf-8") as f:
-            self.feature_index: Dict[str, Dict] = json.load(f)
+            self.feature_index: Dict[str, Dict[str, Any]] = json.load(f)
 
         # Build list of available image IDs
         self.available_ids = list(self.feature_index.keys())
@@ -180,7 +180,7 @@ class CorruptionEngine:
         )
 
         # For each type, sample a random feature_id
-        results = []
+        results: List[Tuple[str, str]] = []
         for feature_type in sampled_types:
             # Filter IDs that have this feature
             available_for_type = [
@@ -326,13 +326,25 @@ class CorruptionEngine:
         
         # Map landmark detector names to our feature names
         for landmark_name, bbox in raw_bboxes.items():
-            if bbox and isinstance(bbox, dict):
-                mapped_name = self.LANDMARK_TO_FEATURE_MAP.get(landmark_name)
-                if mapped_name:
-                    target_bboxes[mapped_name] = bbox
-                # Also handle direct matches (in case some are already mapped)
-                elif landmark_name in self.CORRUPTIBLE_FEATURES:
-                    target_bboxes[landmark_name] = bbox
+            bbox_dict = {}
+            if isinstance(bbox, list) and len(bbox) >= 4:
+                bbox_dict = {
+                    "x_min": bbox[0],
+                    "y_min": bbox[1],
+                    "x_max": bbox[2],
+                    "y_max": bbox[3],
+                }
+            elif isinstance(bbox, dict):
+                bbox_dict = bbox
+            else:
+                continue
+
+            mapped_name = self.LANDMARK_TO_FEATURE_MAP.get(landmark_name)
+            if mapped_name:
+                target_bboxes[mapped_name] = bbox_dict
+            # Also handle direct matches (in case some are already mapped)
+            elif landmark_name in self.CORRUPTIBLE_FEATURES:
+                target_bboxes[landmark_name] = bbox_dict
         
         # If bboxes not available, detect from jawline (ground truth) image
         if not target_bboxes:
@@ -350,6 +362,8 @@ class CorruptionEngine:
                         from pathlib import Path as PathLib
                         landmark_detector_path = PathLib(__file__).parent / "landmark_detector.py"
                         spec = importlib.util.spec_from_file_location("landmark_detector", landmark_detector_path)
+                        if spec is None or spec.loader is None:
+                            raise ImportError(f"Could not load landmark_detector from {landmark_detector_path}")
                         landmark_detector_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(landmark_detector_module)
                         LandmarkDetector = landmark_detector_module.LandmarkDetector
@@ -377,12 +391,11 @@ class CorruptionEngine:
         # Start with base image
         corrupted_image = base_image.copy()
 
-        # Composite each sampled feature
         for feature_type, sampled_id in sampled_features:
             # Get TARGET bbox from face_contour_id (where feature should be placed)
             target_bbox = target_bboxes.get(feature_type)
             
-            if not target_bbox or not isinstance(target_bbox, dict):
+            if not target_bbox:
                 logger.warning(
                     "No target bbox for %s/%s on face %s, skipping",
                     face_contour_id, feature_type, face_contour_id
@@ -438,13 +451,13 @@ def main() -> None:
     parser.add_argument(
         "--feature-index",
         type=str,
-        default="/DATA/facial_features_dataset/metadata/feature_index.json",
+        default="dataset/metadata/feature_index.json",
         help="Path to feature_index.json",
     )
     parser.add_argument(
         "--dataset-root",
         type=str,
-        default="/DATA/facial_features_dataset",
+        default="dataset",
         help="Root path of dataset",
     )
     parser.add_argument(
@@ -479,26 +492,48 @@ def main() -> None:
 
     # Generate corrupted faces for each ID and corruption level
     for face_id in tqdm(sample_ids, desc="Generating corrupted faces"):
+        # Load original face contour
+        entry = engine.feature_index[face_id]
+        features = entry.get("features", {})
+        face_contour_path = features.get("face_contour")
+        
+        if not face_contour_path:
+            continue
+            
+        try:
+            original_img = Image.open(face_contour_path).convert("RGB")
+        except Exception:
+            logger.warning(f"Could not load original image for {face_id}")
+            continue
+
+        images = [original_img]
+        
         for level in [1, 2, 3]:
             corrupted_img, corruption_mask = engine.generate_corrupted_face(
                 face_id, level
             )
 
-            if corrupted_img is None or corruption_mask is None:
-                logger.warning(
-                    "Failed to generate corrupted face for %s level %d", face_id, level
-                )
-                continue
+            if corrupted_img is None:
+                # Create blank placeholder
+                corrupted_img = Image.new("RGB", original_img.size, (0, 0, 0))
+            
+            images.append(corrupted_img)
 
-            # Save corrupted image
-            corrupted_path = output_dir / f"{face_id}_level{level}_corrupted.png"
-            corrupted_img.save(corrupted_path, quality=95)
-
-            # Save corruption mask
-            mask_path = output_dir / f"{face_id}_level{level}_corruption_mask.png"
-            corruption_mask.save(mask_path)
-
-            generated_count += 1
+        # Create side-by-side comparison
+        total_width = sum(img.width for img in images)
+        max_height = max(img.height for img in images)
+        
+        combined_img = Image.new("RGB", (total_width, max_height))
+        x_offset = 0
+        for img in images:
+            combined_img.paste(img, (x_offset, 0))
+            x_offset += img.width
+            
+        # Save combined image
+        combined_path = output_dir / f"{face_id}_comparison.png"
+        combined_img.save(combined_path, quality=95)
+        
+        generated_count += 1
 
     logger.info("Generated %d sample corrupted faces", generated_count)
     logger.info("Saved to %s", output_dir)

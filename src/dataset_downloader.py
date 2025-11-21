@@ -4,13 +4,10 @@ Downloads and organizes facial image datasets from multiple sources
 """
 
 import os
-import sys
 from pathlib import Path
 import logging
+from typing import Dict, Any
 import json
-from typing import Optional, Dict
-import hashlib
-from tqdm import tqdm
 from datetime import datetime
 
 # Configure logging
@@ -38,10 +35,10 @@ class FFHQDownloader:
         Setup: Place kaggle.json in ~/.kaggle/
         """
         try:
-            import kaggle
-            logger.info(f"Downloading FFHQ from Kaggle: {dataset_name}")
+            import kaggle  # type: ignore
+            logger.info(f"Downloading FFHQ from Kaggle: {dataset_name}") # type: ignore
             
-            kaggle.api.dataset_download_files(
+            kaggle.api.dataset_download_files( # type: ignore
                 dataset_name,
                 path=str(self.output_dir),
                 unzip=True
@@ -59,14 +56,14 @@ class FFHQDownloader:
     def download_via_google_drive(self):
         """Download FFHQ from Google Drive."""
         try:
-            import gdown
-            logger.info("Downloading FFHQ from Google Drive...")
+            import gdown  # type: ignore
+            logger.info("Downloading FFHQ from Google Drive...") # type: ignore
             
             # FFHQ 1024x1024 on Google Drive
             url = "https://drive.google.com/uc?id=1u2xu7bSrWxrbUxk-dT-UvEJq8IjdmNTP"
             output = str(self.output_dir / "ffhq_1024.zip")
             
-            gdown.download(url, output, quiet=False)
+            gdown.download(url, output, quiet=False) # type: ignore
             
             # Unzip
             import zipfile
@@ -114,10 +111,10 @@ class CelebAHQDownloader:
     def download_via_kaggle(self, dataset_name: str = "lamsimon/celebahq"):
         """Download CelebA-HQ via Kaggle."""
         try:
-            import kaggle
-            logger.info(f"Downloading CelebA-HQ from Kaggle: {dataset_name}")
+            import kaggle  # type: ignore
+            logger.info(f"Downloading CelebA-HQ from Kaggle: {dataset_name}") # type: ignore
             
-            kaggle.api.dataset_download_files(
+            kaggle.api.dataset_download_files( # type: ignore
                 dataset_name,
                 path=str(self.output_dir),
                 unzip=True
@@ -212,17 +209,17 @@ class DatasetDownloader:
         logger.info(f"  FFHQ: {ffhq_count}")
         logger.info(f"  CelebA-HQ: {celeba_count}")
         
-        return {
-            'ffhq': ffhq_count,
+        return { # type: ignore
+            'ffhq': ffhq_count, # type: ignore
             'celeba_hq': celeba_count,
             'total': total
         }
     
-    def create_manifest(self) -> Dict:
+    def create_manifest(self) -> Dict[str, Any]:
         """Create JSON manifest of all downloaded images."""
         logger.info("\nCreating manifest...")
         
-        manifest = {
+        manifest: Dict[str, Any] = {
             "metadata": {
                 "created": datetime.now().isoformat(),
                 "description": "Manifest of downloaded face images"
@@ -320,7 +317,7 @@ def main():
     
     # Verify and create manifest
     stats = downloader.verify_downloads()
-    manifest = downloader.create_manifest()
+    downloader.create_manifest()
     
     logger.info("\n" + "="*60)
     logger.info("DOWNLOAD COMPLETE!")

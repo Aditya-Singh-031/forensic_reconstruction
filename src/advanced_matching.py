@@ -2,11 +2,12 @@
 Advanced Matching Engine
 Hybrid matching combining embeddings, attributes, and text
 """
-
 import logging
-from typing import Dict, List, Tuple
-import numpy as np
+from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass
+
+from src.multi_face_database import MultiFaceDatabase
+from src.description_parser import ForensicDescriptionParser
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +20,14 @@ class MatchResult:
     embedding_similarity: float
     attribute_similarity: float
     text_similarity: float
-    face_data: Dict
+    face_data: Dict[str, Any]
     rank: int
 
-
+    
 class AdvancedMatchingEngine:
     """Advanced matching with embeddings, attributes, and text."""
-    
-    def __init__(self, database, parser):
+
+    def __init__(self, database: MultiFaceDatabase, parser: ForensicDescriptionParser):
         """Initialize matching engine."""
         logger.info("Initializing AdvancedMatchingEngine...")
         
@@ -50,11 +51,8 @@ class AdvancedMatchingEngine:
         """Match description using multiple methods."""
         logger.info(f"\nMatching: {description[:50]}...")
         
-        parsed = self.parser.parse(description)
-        query_attributes = parsed['attributes']
-        
-        candidates = {}
-        match_scores = {}
+        candidates: Dict[str, Dict[str, Any]] = {}
+        match_scores: Dict[str, Dict[str, float]] = {}
         
         # Text-based search (fastest, uses CLIP)
         if use_text:
@@ -73,7 +71,7 @@ class AdvancedMatchingEngine:
                     }
         
         # Composite scoring
-        results = []
+        results: List[MatchResult] = []
         for record_id, scores in match_scores.items():
             composite = (
                 scores['embedding'] * self.weights['embedding'] +
@@ -109,11 +107,11 @@ class AdvancedMatchingEngine:
         """Search by image."""
         logger.info(f"Image search: {image_path}")
         
-        embedding_results = self.database.search_by_image(
+        embedding_results: List[Tuple[str, float, Dict[str, Any]]] = self.database.search_by_image(
             image_path, top_k=top_k, threshold=threshold
         )
         
-        results = []
+        results: List[MatchResult] = []
         for record_id, emb_sim, face_data in embedding_results:
             result = MatchResult(
                 record_id=record_id,
@@ -127,7 +125,7 @@ class AdvancedMatchingEngine:
             results.append(result)
         
         return results
-    
+
     def set_weights(self, embedding: float = 0.5,
                    attributes: float = 0.3,
                    text: float = 0.2):

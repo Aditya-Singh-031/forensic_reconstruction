@@ -1,25 +1,28 @@
 """
 Dataset Indexer for Forensic Face Reconstruction.
-
 Scans the extracted facial feature dataset, validates feature availability,
 loads landmark metadata, and produces:
-    - feature_index.json
+    - feature_index.json 
     - train/val/test splits (80/10/10)
     - dataset statistics
 """
 
 from __future__ import annotations
 
-import argparse
-import csv
-import json
 import logging
+import json
+import csv
 import random
+import argparse
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 from tqdm import tqdm
+
+from src.landmark_detector import LandmarkDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,6 +83,11 @@ class DatasetIndexer:
         self.sources_map: Dict[str, str] = {}
         self.feature_stats: Dict[str, Dict[str, int]] = {}
         self.missing_records: Dict[str, List[str]] = {}
+        
+        # Initialize landmark detector
+        logger.info("Initializing LandmarkDetector...")
+        self.detector = LandmarkDetector()
+        logger.info("LandmarkDetector initialized.")
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -176,13 +184,20 @@ class DatasetIndexer:
     # ------------------------------------------------------------------ #
     # Feature Index Construction
     # ------------------------------------------------------------------ #
-    def _build_feature_index(self, image_names: List[str]) -> Dict[str, Dict]:
+    def _build_feature_index(self, image_names: List[str]) -> Dict[str, Dict[str, object]]:
         """Build the feature index for all valid images."""
-        feature_index: Dict[str, Dict] = {}
+        feature_index: Dict[str, Dict[str, object]] = {}
         self._init_feature_stats()
 
+        first_image_with_bboxes_found = False
         for image_name in tqdm(image_names, desc="Indexing images"):
             entry = self._build_single_entry(image_name)
+            
+            if not first_image_with_bboxes_found and entry.get("bboxes"):
+                logger.info(f"First image with bboxes verification ({image_name}):")
+                logger.info(json.dumps(entry["bboxes"], indent=2))
+                first_image_with_bboxes_found = True
+
             if entry.get("status", {}).get("is_complete"):
                 feature_index[image_name] = entry
             else:
@@ -193,7 +208,20 @@ class DatasetIndexer:
                 )
         return feature_index
 
-    def _build_single_entry(self, image_name: str) -> Dict:
+    def _calculate_bbox(self, landmarks: List[List[float]]) -> List[int]:
+        """Calculate bbox [x_min, y_min, x_max, y_max, width, height] from landmarks."""
+        if not landmarks:
+            return []
+        arr = np.array(landmarks)
+        x_min = int(np.min(arr[:, 0]))
+        y_min = int(np.min(arr[:, 1]))
+        x_max = int(np.max(arr[:, 0]))
+        y_max = int(np.max(arr[:, 1]))
+        width = x_max - x_min
+        height = y_max - y_min
+        return [x_min, y_min, x_max, y_max, width, height]
+
+    def _build_single_entry(self, image_name: str) -> Dict[str, object]:
         """Build index entry for a single image."""
         entry: Dict[str, object] = {
             "image_name": image_name,
@@ -206,9 +234,89 @@ class DatasetIndexer:
         entry["landmarks_json"] = str(
             self.paths.landmarks_dir / f"{image_name}_landmarks.json"
         )
-        entry["bboxes"] = bbox_map
 
-        missing_components: List[str] = []
+        # Run fresh landmark detection to get accurate bboxes
+        # Try to find raw image for landmark detection
+        source = self.sources_map.get(image_name, "unknown")
+        raw_image_path = None
+        
+        if source == "celeba_hq":
+             raw_image_path = self.paths.dataset_root / "raw_images" / "celeba_hq" / f"{image_name}.jpg"
+        elif source == "ffhq":
+             raw_image_path = self.paths.dataset_root / "raw_images" / "ffhq" / f"{image_name}.png"
+        
+        # Fallback search if source is unknown or file doesn't exist at predicted path
+        if not raw_image_path or not raw_image_path.exists():
+             # Try searching in both directories
+             possible_paths = [
+                 self.paths.dataset_root / "raw_images" / "celeba_hq" / f"{image_name}.jpg",
+                 self.paths.dataset_root / "raw_images" / "celeba_hq" / f"{image_name}.png",
+                 self.paths.dataset_root / "raw_images" / "ffhq" / f"{image_name}.png",
+                 self.paths.dataset_root / "raw_images" / "ffhq" / f"{image_name}.jpg",
+             ]
+             for p in possible_paths:
+                 if p.exists():
+                     raw_image_path = p
+                     break
+
+        if raw_image_path and raw_image_path.exists():
+            try:
+                result = self.detector.detect(
+                    str(raw_image_path),
+                    return_visualization=False,
+                    return_groups=True,
+                    return_coordinates=True
+                )
+                groups = result.get("groups", {})
+                bbox_map = {}
+
+                feature_mapping = {
+                    'left_eye': 'eyes_left',
+                    'right_eye': 'eyes_right',
+                    'left_eyebrow': 'eyebrows_left',
+                    'right_eyebrow': 'eyebrows_right',
+                    'mouth_outer': 'mouth_outer',
+                    'mouth_inner': 'mouth_inner',
+                    'left_ear': 'ears_left',
+                    'right_ear': 'ears_right',
+                    'face_contour': 'face_contour',
+                    'jawline': 'jawline',
+                }
+
+                # Process standard features
+                for group_name, target_name in feature_mapping.items():
+                    if group_name in groups:
+                        landmarks = groups[group_name].get('landmarks_pixel', [])
+                        bbox = self._calculate_bbox(landmarks)
+                        if bbox:
+                            bbox_map[target_name] = bbox
+                        else:
+                            logger.warning(f"Empty landmarks for {group_name} in {image_name}")
+                    else:
+                        # logger.warning(f"Missing group {group_name} in {image_name}")
+                        pass
+
+                # Process nose (union of nose_tip and nose_base)
+                nose_landmarks = []
+                if 'nose_tip' in groups:
+                    nose_landmarks.extend(groups['nose_tip'].get('landmarks_pixel', []))
+                if 'nose_base' in groups:
+                    nose_landmarks.extend(groups['nose_base'].get('landmarks_pixel', []))
+
+                if nose_landmarks:
+                    bbox_map['nose'] = self._calculate_bbox(nose_landmarks)
+                else:
+                    logger.warning(f"Missing nose landmarks in {image_name}")
+                
+                entry['bboxes'] = bbox_map
+
+            except Exception as e:
+                logger.warning(f"Failed to run landmark detection for {image_name}: {e}")
+        else:
+            logger.warning(f"Raw image not found for {image_name}")
+
+        # Check for missing features
+        missing_components = []
 
         for config in self.FEATURE_CONFIGS:
             feature_path = self._feature_file(config.name, image_name)
@@ -286,7 +394,7 @@ class DatasetIndexer:
 
     def _compute_statistics(
         self,
-        feature_index: Dict[str, Dict],
+        feature_index: Dict[str, Dict[str, object]],
         splits: Dict[str, List[str]],
     ) -> Dict[str, object]:
         """Compute dataset statistics."""
@@ -303,7 +411,7 @@ class DatasetIndexer:
     # ------------------------------------------------------------------ #
     def _save_outputs(
         self,
-        feature_index: Dict[str, Dict],
+        feature_index: Dict[str, Dict[str, object]],
         splits: Dict[str, List[str]],
         statistics: Dict[str, object],
     ) -> None:
@@ -361,4 +469,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

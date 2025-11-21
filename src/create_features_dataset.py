@@ -14,10 +14,12 @@ import logging
 import json
 import numpy as np
 from PIL import Image
+from numpy.typing import NDArray
 import cv2
 from tqdm import tqdm
 from datetime import datetime
 import csv
+from typing import Any
 from typing import Dict, List, Optional, Tuple
 
 from src.landmark_detector import LandmarkDetector
@@ -78,15 +80,15 @@ class FacialFeaturesExtractor:
                 writer.writerow([
                     'image_name', 'source', 'processed_date',
                     'landmarks_success', 'features_extracted', 
-                    'processing_time_sec', 'errors'
+                    'processing_time_sec', 'errors',
                 ])
     
-    def process_image(self, image_path: Path, source: str) -> Dict:
+    def process_image(self, image_path: Path, source: str) -> Dict[str, object]:
         """Process single image."""
         start_time = datetime.now()
         image_name = image_path.stem
         
-        result = {
+        result: Dict[str, Any] = {
             'image_name': image_name,
             'source': source,
             'success': False,
@@ -98,13 +100,13 @@ class FacialFeaturesExtractor:
             img_array = np.array(img)
             img_height, img_width = img_array.shape[:2]
             
-            landmark_result = self.landmark_detector.detect(
+            landmark_result: Dict[str, Any] = self.landmark_detector.detect( # type: ignore
                 str(image_path),
                 return_visualization=True,
                 return_groups=True
             )
-            
-            landmark_data = {
+            # landmark_result is a Dict[str, Any]
+            landmark_data: Dict[str, Any] = {
                 'image_name': image_name,
                 'num_landmarks': landmark_result.get('num_landmarks', 0),
             }
@@ -119,8 +121,8 @@ class FacialFeaturesExtractor:
             
             result['landmarks_success'] = True
             
-            features_extracted = self._extract_all_features(
-                img, 
+            features_extracted = self._extract_all_features( # type: ignore
+                img,
                 img_array,
                 landmark_result,
                 image_name,
@@ -136,7 +138,7 @@ class FacialFeaturesExtractor:
             self._log_result(result)
             
             status = "✓" if result['success'] else "✗"
-            logger.info(f"{status} {image_name}: {features_extracted} features, {processing_time:.2f}s")
+            logger.info(f"{status} {image_name}: {features_extracted} features, {processing_time:.2f}s") # type: ignore
             
         except Exception as e:
             logger.error(f"Failed to process {image_name}: {e}")
@@ -145,15 +147,15 @@ class FacialFeaturesExtractor:
         
         return result
     
-    def _extract_all_features(self, img: Image.Image, img_array: np.ndarray,
-                             landmark_result: Dict, image_name: str,
+    def _extract_all_features(self, img: Image.Image, img_array: NDArray[np.uint8],
+                             landmark_result: Dict[str, Any], image_name: str,
                              img_width: int, img_height: int) -> int:
         """Extract features from all landmark groups."""
         
         features_extracted = 0
         groups = landmark_result.get('groups', {})
         
-        feature_masks = {}
+        feature_masks: Dict[str, NDArray[np.uint8]] = {}
         
         feature_mapping = {
             'left_eye': 'eyes_left',
@@ -177,7 +179,6 @@ class FacialFeaturesExtractor:
         ]
         
         # SPECIAL: Handle NOSE with TRIANGLE
-        nose_processed = False
         if 'nose_tip' in groups and 'nose_base' in groups:
             nose_tip_data = groups['nose_tip']
             nose_base_data = groups['nose_base']
@@ -247,7 +248,7 @@ class FacialFeaturesExtractor:
                         
                         # Store full-size mask for subtraction
                         full_mask = np.zeros((img_height, img_width), dtype=np.uint8)
-                        cv2.fillPoly(full_mask, [triangle_points], 255)
+                        cv2.fillPoly(full_mask, [triangle_points], color=(255,))
                         feature_masks['nose_tip'] = full_mask
                         feature_masks['nose_base'] = full_mask
                         
@@ -263,7 +264,6 @@ class FacialFeaturesExtractor:
                         
                         features_extracted += 1
                         logger.debug(f"  ✓ Extracted NOSE TRIANGLE")
-                        nose_processed = True
         
         # First pass: extract all other features
         for detector_group_name, group_data in groups.items():
@@ -291,10 +291,7 @@ class FacialFeaturesExtractor:
                 # Extract x, y coordinates
                 landmarks_2d = []
                 for lm in landmarks_pixel:
-                    if isinstance(lm, (list, tuple)):
-                        landmarks_2d.append([int(lm[0]), int(lm[1])])
-                    else:
-                        landmarks_2d.append([int(lm[0]), int(lm[1])])
+                    landmarks_2d.append([int(lm[0]), int(lm[1])]) # type: ignore
                 
                 landmarks_2d = np.array(landmarks_2d, dtype=np.int32)
                 
@@ -312,7 +309,7 @@ class FacialFeaturesExtractor:
                 
                 cropped_img = img.crop((x_min, y_min, x_max, y_max))
                 
-                cropped_mask = self._create_mask_from_contour(
+                cropped_mask: Image.Image = self._create_mask_from_contour(
                     landmarks_2d,
                     (x_min, y_min, x_max, y_max),
                     (img_height, img_width)
@@ -321,15 +318,15 @@ class FacialFeaturesExtractor:
                 # Store mask for subtraction
                 if detector_group_name in subtract_from_contour:
                     full_mask = np.zeros((img_height, img_width), dtype=np.uint8)
-                    cv2.fillPoly(full_mask, [landmarks_2d], 255)
+                    cv2.fillPoly(full_mask, [landmarks_2d], color=(255,))
                     feature_masks[detector_group_name] = full_mask
                 
                 masked_img = self._apply_mask_transparency(cropped_img, cropped_mask)
                 
-                img_path = self.features_dir / feature_name / f"{image_name}_{feature_name}.png"
+                img_path = self.features_dir / str(feature_name) / f"{image_name}_{feature_name}.png"
                 masked_img.save(str(img_path), quality=95)
                 
-                mask_path = self.features_dir / feature_name / f"{image_name}_{feature_name}_mask.png"
+                mask_path = self.features_dir / str(feature_name) / f"{image_name}_{feature_name}_mask.png"
                 cropped_mask.save(str(mask_path))
                 
                 features_extracted += 1
@@ -354,9 +351,9 @@ class FacialFeaturesExtractor:
                         landmarks_2d = []
                         for lm in landmarks_pixel:
                             if isinstance(lm, (list, tuple)):
-                                landmarks_2d.append([int(lm[0]), int(lm[1])])
+                                landmarks_2d.append([int(lm[0]), int(lm[1])]) # type: ignore
                             else:
-                                landmarks_2d.append([int(lm[0]), int(lm[1])])
+                                landmarks_2d.append([int(lm[0]), int(lm[1])]) # type: ignore
                         
                         landmarks_2d = np.array(landmarks_2d, dtype=np.int32)
                         
@@ -370,7 +367,7 @@ class FacialFeaturesExtractor:
                         
                         if width >= 5 and height >= 5:
                             face_contour_mask = np.zeros((img_height, img_width), dtype=np.uint8)
-                            cv2.fillPoly(face_contour_mask, [landmarks_2d], 255)
+                            cv2.fillPoly(face_contour_mask, [landmarks_2d], color=(255,))
                             
                             # Subtract all features
                             subtracted_count = 0
@@ -390,7 +387,8 @@ class FacialFeaturesExtractor:
                             masked_img.save(str(img_path), quality=95)
                             
                             mask_path = self.features_dir / "face_contour" / f"{image_name}_face_contour_mask.png"
-                            cropped_mask.save(str(mask_path))
+                            with mask_path.open("wb") as f:
+                                cropped_mask.save(f, format="PNG")
                             
                             logger.debug(f"  ✓ Extracted face_contour")
         
@@ -399,8 +397,8 @@ class FacialFeaturesExtractor:
         
         return features_extracted
     
-    def _create_triangle_mask(self, triangle_points: np.ndarray, bbox: Tuple,
-                             img_size: Tuple[int, int]) -> Image.Image:
+    def _create_triangle_mask(self, triangle_points: NDArray[np.int32], bbox: Tuple[int, int, int, int],
+                               img_size: Tuple[int, int]) -> Image.Image:
         """Create binary mask from triangle."""
         height, width = img_size
         x1, y1, x2, y2 = bbox
@@ -408,7 +406,7 @@ class FacialFeaturesExtractor:
         full_mask = np.zeros((height, width), dtype=np.uint8)
         
         # Draw filled triangle
-        cv2.fillPoly(full_mask, [triangle_points], 255)
+        cv2.fillPoly(full_mask, [triangle_points], color=(255,))
         
         # Crop to bbox
         cropped_mask_array = full_mask[y1:y2, x1:x2]
@@ -429,7 +427,7 @@ class FacialFeaturesExtractor:
         
         return img_rgba
     
-    def _create_mask_from_contour(self, landmarks_2d: np.ndarray, bbox: Tuple,
+    def _create_mask_from_contour(self, landmarks_2d: NDArray[np.int32], bbox: Tuple[int, int, int, int],
                                   img_size: Tuple[int, int]) -> Image.Image:
         """Create binary mask from 2D landmark contour."""
         height, width = img_size
@@ -439,21 +437,21 @@ class FacialFeaturesExtractor:
         
         if len(landmarks_2d) >= 3:
             try:
-                cv2.fillPoly(full_mask, [landmarks_2d], 255)
+                cv2.fillPoly(full_mask, [landmarks_2d], color=(255,))
             except Exception as e:
                 logger.debug(f"fillPoly failed: {e}")
                 for pt in landmarks_2d:
-                    cv2.circle(full_mask, tuple(pt), 2, 255, -1)
+                    cv2.circle(full_mask, tuple(pt), 2, (255,), -1)
         else:
             for pt in landmarks_2d:
-                cv2.circle(full_mask, tuple(pt), 3, 255, -1)
+                cv2.circle(full_mask, tuple(pt), 3, (255,), -1)
         
         cropped_mask_array = full_mask[y1:y2, x1:x2]
         cropped_mask = Image.fromarray(cropped_mask_array, mode='L')
         
         return cropped_mask
     
-    def _log_result(self, result: Dict):
+    def _log_result(self, result: Dict[str, Any]):
         """Log result to CSV."""
         try:
             with open(self.log_file, 'a', newline='') as f:
@@ -480,7 +478,7 @@ class FacialFeaturesExtractor:
         logger.info("- Nose SUBTRACTED from face_contour")
         logger.info("="*60)
         
-        image_paths = []
+        image_paths: List[Tuple[Path, str]] = []
         
         ffhq_dir = self.input_dir / "ffhq"
         if ffhq_dir.exists():
