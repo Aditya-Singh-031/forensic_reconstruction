@@ -1,0 +1,31 @@
+# Training Pipeline Dependencies
+
+# Core ML Framework
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Image Processing
+pillow>=9.0.0
+opencv-python>=4.7.0
+
+# Data Processing
+numpy>=1.23.0
+scipy>=1.10.0
+
+# Progress & Logging
+tqdm>=4.65.0
+tensorboard>=2.12.0
+
+# Metrics & Losses
+lpips>=0.1.4  # Perceptual loss
+
+# Utilities
+pyyaml>=6.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: Face Recognition for Identity Loss
+# Uncomment if using identity loss
+# facenet-pytorch>=2.5.3
+# insightface>=0.7.3

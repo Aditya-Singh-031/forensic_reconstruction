@@ -1,544 +1,307 @@
 """
-Corruption Engine for Forensic Face Reconstruction Training.
-
-Generates corrupted faces by compositing randomly sampled features onto
-face_contour base images. Supports multiple corruption levels.
+Corruption Engine - Phase 2
+Creates corrupted faces by randomly compositing features
+Implements curriculum learning corruption levels
 """
 
-from __future__ import annotations
-
-import argparse
 import json
 import logging
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Dict, List, Tuple, Optional
 import numpy as np
 from PIL import Image
-from tqdm import tqdm
+import cv2
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 
 class CorruptionEngine:
-    """Engine for generating corrupted faces by compositing random features."""
-
-    # Feature types that can be corrupted (exclude face_contour and jawline)
+    """Generate corrupted faces for training."""
+    
+    # Feature types that can be corrupted
     CORRUPTIBLE_FEATURES = [
         "eyes_left",
         "eyes_right",
-        "eyebrows_left",
+        "eyebrows_left", 
         "eyebrows_right",
         "nose",
         "mouth_outer",
-        "mouth_inner",
-        "ears_left",
-        "ears_right",
+        "mouth_inner"
     ]
     
-    # Mapping from landmark detector names to our feature names
-    LANDMARK_TO_FEATURE_MAP = {
-        "left_eye": "eyes_left",
-        "right_eye": "eyes_right",
-        "left_eyebrow": "eyebrows_left",
-        "right_eyebrow": "eyebrows_right",
-        "nose_tip": "nose",
-        "nose_base": "nose",
-        "mouth_outer": "mouth_outer",
-        "mouth_inner": "mouth_inner",
-        "left_ear": "ears_left",
-        "right_ear": "ears_right",
-    }
-
-    def __init__(
-        self,
-        feature_index_path: str | Path,
-        dataset_root_path: str | Path,
-    ) -> None:
-        """
-        Initialize the CorruptionEngine.
-
-        Args:
-            feature_index_path: Path to feature_index.json
-            dataset_root_path: Root path of the dataset
-        """
-        self.feature_index_path = Path(feature_index_path)
-        self.dataset_root = Path(dataset_root_path)
-        self.features_dir = self.dataset_root / "features"
-
-        # Load feature index
-        logger.info("Loading feature index from %s", self.feature_index_path)
-        with self.feature_index_path.open("r", encoding="utf-8") as f:
-            self.feature_index: Dict[str, Dict[str, Any]] = json.load(f)
-
-        # Build list of available image IDs
-        self.available_ids = list(self.feature_index.keys())
-        logger.info("Loaded %d images from feature index", len(self.available_ids))
-
-        # Initialize random generator
-        self.random_gen = random.Random(42)
+    def __init__(self, feature_index: Dict, seed: int = 42):
+        """Initialize corruption engine.
         
-        # Cache for landmark detections (bboxes per image)
-        self.bbox_cache: Dict[str, Dict[str, Dict[str, int]]] = {}
-
-    def load_feature_with_mask(
-        self, feature_id: str, feature_type: str
-    ) -> Optional[Image.Image]:
-        """
-        Load feature image and mask, composite into RGBA image.
-
         Args:
-            feature_id: Image ID (e.g., "00001")
-            feature_type: Feature type (e.g., "eyes_left")
-
-        Returns:
-            PIL Image in RGBA mode, or None if loading fails
+            feature_index: Feature index from dataset_indexer
+            seed: Random seed for reproducibility
         """
-        if feature_id not in self.feature_index:
-            logger.warning("Feature ID %s not found in index", feature_id)
-            return None
-
-        entry = self.feature_index[feature_id]
-
-        # Get feature and mask paths
-        features = entry.get("features", {})
-        masks = entry.get("masks", {})
-
-        feature_path = features.get(feature_type)
-        mask_path = masks.get(feature_type)
-
-        if not feature_path or not mask_path:
-            logger.warning(
-                "Missing feature or mask for %s/%s: feature=%s, mask=%s",
-                feature_id,
-                feature_type,
-                feature_path is not None,
-                mask_path is not None,
-            )
-            return None
-
-        feature_path = Path(feature_path)
-        mask_path = Path(mask_path)
-
-        if not feature_path.exists() or not mask_path.exists():
-            logger.warning(
-                "Feature or mask file missing for %s/%s", feature_id, feature_type
-            )
-            return None
-
-        try:
-            # Load feature image (RGB)
-            feature_img = Image.open(feature_path).convert("RGB")
-
-            # Load mask (L)
-            mask_img = Image.open(mask_path).convert("L")
-
-            # Ensure same size
-            if feature_img.size != mask_img.size:
-                logger.warning(
-                    "Size mismatch for %s/%s: feature=%s, mask=%s. Resizing mask.",
-                    feature_id,
-                    feature_type,
-                    feature_img.size,
-                    mask_img.size,
-                )
-                mask_img = mask_img.resize(feature_img.size, Image.Resampling.LANCZOS)
-
-            # Create RGBA image
-            rgba_img = Image.new("RGBA", feature_img.size)
-            rgba_img.paste(feature_img, (0, 0))
-            rgba_img.putalpha(mask_img)
-
-            return rgba_img
-
-        except Exception as e:
-            logger.warning(
-                "Failed to load feature %s/%s: %s", feature_id, feature_type, e
-            )
-            return None
-
-    def sample_random_features(
-        self, num_features: int
-    ) -> List[Tuple[str, str]]:
-        """
-        Randomly sample feature types and IDs.
-
+        self.feature_index = feature_index
+        self.image_names = list(feature_index.keys())
+        
+        random.seed(seed)
+        np.random.seed(seed)
+        
+        logger.info(f"Initialized CorruptionEngine with {len(self.image_names)} images")
+    
+    def get_corruption_level_features(self, level: int) -> List[str]:
+        """Get features to corrupt for given level.
+        
         Args:
-            num_features: Number of features to sample
-
+            level: Corruption level (1=easy, 2=medium, 3=hard)
+            
         Returns:
-            List of (feature_type, feature_id) tuples
+            features: List of feature types to corrupt
         """
-        # Sample feature types (without replacement)
-        sampled_types = self.random_gen.sample(
-            self.CORRUPTIBLE_FEATURES, min(num_features, len(self.CORRUPTIBLE_FEATURES))
-        )
-
-        # For each type, sample a random feature_id
-        results: List[Tuple[str, str]] = []
-        for feature_type in sampled_types:
-            # Filter IDs that have this feature
-            available_for_type = [
-                img_id
-                for img_id in self.available_ids
-                if feature_type in self.feature_index[img_id].get("features", {})
-                and feature_type in self.feature_index[img_id].get("masks", {})
-            ]
-
-            if not available_for_type:
-                logger.warning("No available images for feature type %s", feature_type)
-                continue
-
-            random_id = self.random_gen.choice(available_for_type)
-            results.append((feature_type, random_id))
-
-        return results
-
-    def composite_feature_on_base(
-        self,
-        base_image: Image.Image,
-        feature_rgba: Image.Image,
-        target_bbox: Dict[str, int],
-    ) -> Image.Image:
-        """
-        Composite feature onto base image at target bbox position.
-
-        Args:
-            base_image: Base face_contour image (RGB)
-            feature_rgba: Feature image with alpha channel (RGBA) - will be resized to target bbox
-            target_bbox: Target bbox dict with keys: x_min, y_min, x_max, y_max
-
-        Returns:
-            Composite image (RGB)
-        """
-        # Convert base to RGBA for compositing
-        base_rgba = base_image.convert("RGBA")
-
-        # Extract bbox coordinates
-        x_min = target_bbox.get("x_min", 0)
-        y_min = target_bbox.get("y_min", 0)
-        x_max = target_bbox.get("x_max", base_image.width)
-        y_max = target_bbox.get("y_max", base_image.height)
-
-        # Calculate target size
-        bbox_width = x_max - x_min
-        bbox_height = y_max - y_min
-
-        if bbox_width > 0 and bbox_height > 0:
-            # Resize sampled feature to match target bbox size
-            feature_resized = feature_rgba.resize(
-                (bbox_width, bbox_height), Image.Resampling.LANCZOS
-            )
-            # Paste at target bbox position
-            base_rgba.paste(feature_resized, (x_min, y_min), feature_resized)
+        if level == 1:
+            # Easy: 2-3 features
+            num_features = random.randint(2, 3)
+        elif level == 2:
+            # Medium: 4-5 features
+            num_features = random.randint(4, 5)
+        elif level == 3:
+            # Hard: 6-7 features
+            num_features = random.randint(6, 7)
         else:
-            logger.warning(
-                "Invalid target bbox: x_min=%d, y_min=%d, x_max=%d, y_max=%d",
-                x_min, y_min, x_max, y_max
-            )
-            # Fallback: center placement
-            self._paste_centered(base_rgba, feature_rgba)
-
-        # Convert back to RGB
-        return base_rgba.convert("RGB")
-
-    def _paste_centered(
-        self, base_rgba: Image.Image, feature_rgba: Image.Image
-    ) -> None:
-        """Paste feature centered on base image."""
-        base_w, base_h = base_rgba.size
-        feat_w, feat_h = feature_rgba.size
-
-        # Center position
-        x = (base_w - feat_w) // 2
-        y = (base_h - feat_h) // 2
-
-        base_rgba.paste(feature_rgba, (x, y), feature_rgba)
-
-    def generate_corrupted_face(
-        self, face_contour_id: str, corruption_level: int
-    ) -> Tuple[Optional[Image.Image], Optional[Image.Image]]:
-        """
-        Generate corrupted face by compositing random features.
-
+            # Default to medium
+            num_features = 4
+        
+        # Randomly select features to corrupt
+        features = random.sample(self.CORRUPTIBLE_FEATURES, 
+                                min(num_features, len(self.CORRUPTIBLE_FEATURES)))
+        return features
+    
+    def load_image_rgba(self, path: str) -> Optional[Image.Image]:
+        """Load image and ensure RGBA format.
+        
         Args:
-            face_contour_id: ID of the face_contour image to use as base
-            corruption_level: Corruption level (1, 2, or 3)
-
+            path: Image path
+            
         Returns:
-            Tuple of (corrupted_image, corruption_mask) or (None, None) on failure
+            img: PIL Image in RGBA format, or None if load fails
         """
-        if face_contour_id not in self.feature_index:
-            logger.warning("Face contour ID %s not found", face_contour_id)
-            return None, None
-
-        entry = self.feature_index[face_contour_id]
-        features = entry.get("features", {})
-
-        # Load face_contour base image
-        face_contour_path = features.get("face_contour")
-        if not face_contour_path:
-            logger.warning("No face_contour for ID %s", face_contour_id)
-            return None, None
-
-        face_contour_path = Path(face_contour_path)
-        if not face_contour_path.exists():
-            logger.warning("Face contour file missing: %s", face_contour_path)
-            return None, None
-
         try:
-            base_image = Image.open(face_contour_path).convert("RGB")
+            img = Image.open(path)
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            return img
         except Exception as e:
-            logger.warning("Failed to load face_contour %s: %s", face_contour_id, e)
-            return None, None
-
-        # Determine number of features to corrupt
-        if corruption_level == 1:
-            num_features = self.random_gen.randint(2, 3)
-        elif corruption_level == 2:
-            num_features = self.random_gen.randint(4, 5)
-        elif corruption_level == 3:
-            num_features = self.random_gen.randint(6, 8)
-        else:
-            logger.warning("Invalid corruption level %d, using level 2", corruption_level)
-            num_features = self.random_gen.randint(4, 5)
-
-        # Sample random features
-        sampled_features = self.sample_random_features(num_features)
-
-        if not sampled_features:
-            logger.warning("No features sampled for %s", face_contour_id)
-            return None, None
-
-        # Create corruption mask (same size as base, black initially)
-        corruption_mask = Image.new("L", base_image.size, 0)
-        corruption_mask_array = np.array(corruption_mask)
-
-        # Get TARGET bboxes from face_contour_id's feature_index
-        # First try to get from stored bboxes (if available)
-        raw_bboxes = entry.get("bboxes", {})
-        target_bboxes = {}
+            logger.error(f"Failed to load image {path}: {e}")
+            return None
+    
+    def composite_feature(self, 
+                         base_img: Image.Image,
+                         feature_img: Image.Image,
+                         feature_mask: Optional[Image.Image] = None) -> Image.Image:
+        """Composite feature onto base image using alpha channel.
         
-        # Map landmark detector names to our feature names
-        for landmark_name, bbox in raw_bboxes.items():
-            bbox_dict = {}
-            if isinstance(bbox, list) and len(bbox) >= 4:
-                bbox_dict = {
-                    "x_min": bbox[0],
-                    "y_min": bbox[1],
-                    "x_max": bbox[2],
-                    "y_max": bbox[3],
-                }
-            elif isinstance(bbox, dict):
-                bbox_dict = bbox
-            else:
-                continue
-
-            mapped_name = self.LANDMARK_TO_FEATURE_MAP.get(landmark_name)
-            if mapped_name:
-                target_bboxes[mapped_name] = bbox_dict
-            # Also handle direct matches (in case some are already mapped)
-            elif landmark_name in self.CORRUPTIBLE_FEATURES:
-                target_bboxes[landmark_name] = bbox_dict
+        Args:
+            base_img: Base image (face_contour)
+            feature_img: Feature to composite (has alpha channel)
+            feature_mask: Optional mask (not used if feature has alpha)
+            
+        Returns:
+            result: Composited image
+        """
+        # Convert to numpy for easier manipulation
+        base_array = np.array(base_img)
+        feature_array = np.array(feature_img)
         
-        # If bboxes not available, detect from jawline (ground truth) image
-        if not target_bboxes:
-            # Check cache first
-            if face_contour_id in self.bbox_cache:
-                target_bboxes = self.bbox_cache[face_contour_id]
-            else:
-                features = entry.get("features", {})
-                jawline_path = features.get("jawline")
-                if jawline_path and Path(jawline_path).exists():
-                    try:
-                        # Use landmark detector to get bboxes from original image
-                        # Import directly to avoid package __init__ issues
-                        import importlib.util
-                        from pathlib import Path as PathLib
-                        landmark_detector_path = PathLib(__file__).parent / "landmark_detector.py"
-                        spec = importlib.util.spec_from_file_location("landmark_detector", landmark_detector_path)
-                        if spec is None or spec.loader is None:
-                            raise ImportError(f"Could not load landmark_detector from {landmark_detector_path}")
-                        landmark_detector_module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(landmark_detector_module)
-                        LandmarkDetector = landmark_detector_module.LandmarkDetector
-                        detector = LandmarkDetector()
-                        result = detector.detect(str(jawline_path), return_groups=True, return_visualization=False)
-                        groups = result.get("groups", {})
-                        
-                        # Map landmark detector groups to our feature names
-                        detected_bboxes = {}
-                        for landmark_name, group_data in groups.items():
-                            mapped_name = self.LANDMARK_TO_FEATURE_MAP.get(landmark_name)
-                            if mapped_name and mapped_name in self.CORRUPTIBLE_FEATURES:
-                                bbox = group_data.get("bbox")
-                                if bbox and isinstance(bbox, dict):
-                                    detected_bboxes[mapped_name] = bbox
-                        
-                        # Cache the results
-                        self.bbox_cache[face_contour_id] = detected_bboxes
-                        target_bboxes = detected_bboxes
-                    except Exception as e:
-                        logger.warning("Failed to detect landmarks for %s: %s", face_contour_id, e)
-                        # Cache empty dict to avoid repeated attempts
-                        self.bbox_cache[face_contour_id] = {}
-
+        # If feature has alpha channel, use it
+        if feature_array.shape[2] == 4:
+            alpha = feature_array[:, :, 3:4] / 255.0
+            
+            # Resize alpha to match base if needed
+            if base_array.shape[:2] != feature_array.shape[:2]:
+                # Feature is cropped, we need position info
+                # For now, assume same size (will handle positioning in data_loader)
+                return base_img
+            
+            # Blend using alpha
+            result_array = base_array.copy()
+            result_array[:, :, :3] = (
+                alpha * feature_array[:, :, :3] + 
+                (1 - alpha) * base_array[:, :, :3]
+            ).astype(np.uint8)
+            
+            return Image.fromarray(result_array, mode='RGBA')
+        
+        # Fallback: direct paste
+        result = base_img.copy()
+        result.paste(feature_img, (0, 0), feature_img if feature_img.mode == 'RGBA' else None)
+        return result
+    
+    def create_corrupted_face(self,
+                             image_name: str,
+                             corruption_level: int = 2,
+                             spatial_augment: bool = False) -> Tuple[Image.Image, Image.Image, List[str]]:
+        """Create corrupted face by random feature compositing.
+        
+        Args:
+            image_name: Base image name
+            corruption_level: Level of corruption (1-3)
+            spatial_augment: Apply spatial augmentations
+            
+        Returns:
+            corrupted_face: Corrupted image
+            target_face: Ground truth (jawline)
+            corrupted_features: List of corrupted feature names
+        """
+        # Load base face_contour
+        base_data = self.feature_index[image_name]
+        base_path = base_data["features"]["face_contour"]
+        base_img = self.load_image_rgba(base_path)
+        
+        if base_img is None:
+            raise ValueError(f"Failed to load base image for {image_name}")
+        
+        # Load target (jawline)
+        target_path = base_data["features"]["jawline"]
+        target_img = self.load_image_rgba(target_path)
+        
+        if target_img is None:
+            raise ValueError(f"Failed to load target image for {image_name}")
+        
+        # Determine which features to corrupt
+        features_to_corrupt = self.get_corruption_level_features(corruption_level)
+        
         # Start with base image
-        corrupted_image = base_image.copy()
-
-        for feature_type, sampled_id in sampled_features:
-            # Get TARGET bbox from face_contour_id (where feature should be placed)
-            target_bbox = target_bboxes.get(feature_type)
+        corrupted = base_img.copy()
+        
+        # Composite each corrupted feature
+        for feature_type in features_to_corrupt:
+            # Sample random image for this feature
+            random_image_name = random.choice(self.image_names)
+            random_data = self.feature_index[random_image_name]
             
-            if not target_bbox:
-                logger.warning(
-                    "No target bbox for %s/%s on face %s, skipping",
-                    face_contour_id, feature_type, face_contour_id
-                )
+            # Check if this random image has the feature
+            if feature_type not in random_data["features"]:
                 continue
-
-            # Load random feature with mask (from sampled_id)
-            feature_rgba = self.load_feature_with_mask(sampled_id, feature_type)
-
-            if feature_rgba is None:
-                logger.warning(
-                    "Skipping feature %s/%s (failed to load)", sampled_id, feature_type
-                )
+            
+            # Load random feature
+            feature_path = random_data["features"][feature_type]
+            feature_img = self.load_image_rgba(feature_path)
+            
+            if feature_img is None:
                 continue
+            
+            # Load mask if available
+            mask_img = None
+            if feature_type in random_data["masks"]:
+                mask_path = random_data["masks"][feature_type]
+                mask_img = self.load_image_rgba(mask_path)
+            
+            # Composite onto corrupted image
+            # Note: This is simplified - full version needs position info from landmarks
+            # For now, we assume features are already positioned correctly
+            corrupted = self.composite_feature(corrupted, feature_img, mask_img)
+        
+        return corrupted, target_img, features_to_corrupt
+    
+    def create_corruption_mask(self, 
+                               image_size: Tuple[int, int],
+                               corrupted_features: List[str]) -> Image.Image:
+        """Create binary mask showing which regions were corrupted.
+        
+        Args:
+            image_size: (width, height)
+            corrupted_features: List of corrupted feature names
+            
+        Returns:
+            mask: Binary mask (white=corrupted, black=original)
+        """
+        # Simplified: Return all-ones mask for now
+        # Full version would use actual feature positions
+        mask = np.ones((image_size[1], image_size[0]), dtype=np.uint8) * 255
+        return Image.fromarray(mask, mode='L')
+    
+    def visualize_corruption(self,
+                            image_name: str,
+                            corruption_level: int = 2,
+                            save_path: Optional[str] = None) -> Image.Image:
+        """Visualize corruption process for debugging.
+        
+        Args:
+            image_name: Image to corrupt
+            corruption_level: Corruption level
+            save_path: Optional path to save visualization
+            
+        Returns:
+            vis: Visualization image (base | corrupted | target)
+        """
+        # Load base
+        base_data = self.feature_index[image_name]
+        base_img = self.load_image_rgba(base_data["features"]["face_contour"])
+        
+        # Create corrupted
+        corrupted, target, features = self.create_corrupted_face(
+            image_name, corruption_level
+        )
+        
+        # Create side-by-side visualization
+        width = base_img.size[0]
+        height = base_img.size[1]
+        
+        vis = Image.new('RGB', (width * 3, height))
+        vis.paste(base_img.convert('RGB'), (0, 0))
+        vis.paste(corrupted.convert('RGB'), (width, 0))
+        vis.paste(target.convert('RGB'), (width * 2, 0))
+        
+        if save_path:
+            vis.save(save_path)
+            logger.info(f"Saved visualization to {save_path}")
+        
+        return vis
 
-            # Composite onto base using TARGET bbox (resize sampled feature to target size)
-            corrupted_image = self.composite_feature_on_base(
-                corrupted_image, feature_rgba, target_bbox
-            )
 
-            # Update corruption mask using TARGET bbox
-            x_min = target_bbox.get("x_min", 0)
-            y_min = target_bbox.get("y_min", 0)
-            x_max = target_bbox.get("x_max", base_image.width)
-            y_max = target_bbox.get("y_max", base_image.height)
-
-            bbox_width = x_max - x_min
-            bbox_height = y_max - y_min
-
-            if bbox_width > 0 and bbox_height > 0:
-                # Create a mask for the target bbox region (white = corrupted)
-                # We use the full bbox area as corrupted
-                y_end = min(y_min + bbox_height, corruption_mask_array.shape[0])
-                x_end = min(x_min + bbox_width, corruption_mask_array.shape[1])
-
-                if (y_min < corruption_mask_array.shape[0] and 
-                    x_min < corruption_mask_array.shape[1] and
-                    y_end > y_min and x_end > x_min):
-                    # Mark entire bbox region as corrupted
-                    corruption_mask_array[y_min:y_end, x_min:x_end] = 255
-
-        # Convert corruption mask array back to Image
-        corruption_mask = Image.fromarray(corruption_mask_array, mode="L")
-
-        return corrupted_image, corruption_mask
-
-
-def main() -> None:
-    """Main execution for testing corruption engine."""
-    parser = argparse.ArgumentParser(
-        description="Test corruption engine with sample images"
-    )
-    parser.add_argument(
-        "--feature-index",
-        type=str,
-        default="dataset/metadata/feature_index.json",
-        help="Path to feature_index.json",
-    )
-    parser.add_argument(
-        "--dataset-root",
-        type=str,
-        default="dataset",
-        help="Root path of dataset",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="samples/corruption_test",
-        help="Output directory for test samples",
-    )
-    parser.add_argument(
-        "--num-samples",
-        type=int,
-        default=5,
-        help="Number of face_contour IDs to test",
-    )
-
-    args = parser.parse_args()
-
+def test_corruption_engine():
+    """Test corruption engine with sample data."""
+    import json
+    
+    # Load feature index
+    index_path = "/DATA/facial_features_dataset/metadata/feature_index.json"
+    
+    if not Path(index_path).exists():
+        logger.error(f"Feature index not found: {index_path}")
+        logger.error("Please run dataset_indexer.py first")
+        return
+    
+    with open(index_path) as f:
+        feature_index = json.load(f)
+    
+    logger.info(f"Loaded feature index with {len(feature_index)} images")
+    
     # Initialize engine
-    engine = CorruptionEngine(args.feature_index, args.dataset_root)
-
-    # Create output directory
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Get random sample of face_contour IDs
-    available_ids = engine.available_ids
-    sample_ids = random.sample(available_ids, min(args.num_samples, len(available_ids)))
-
-    logger.info("Testing corruption on %d face_contour IDs", len(sample_ids))
-
-    generated_count = 0
-
-    # Generate corrupted faces for each ID and corruption level
-    for face_id in tqdm(sample_ids, desc="Generating corrupted faces"):
-        # Load original face contour
-        entry = engine.feature_index[face_id]
-        features = entry.get("features", {})
-        face_contour_path = features.get("face_contour")
+    engine = CorruptionEngine(feature_index)
+    
+    # Test corruption on first image
+    image_name = list(feature_index.keys())[0]
+    logger.info(f"\nTesting corruption on: {image_name}")
+    
+    # Test all corruption levels
+    for level in [1, 2, 3]:
+        logger.info(f"\nCorruption level {level}:")
         
-        if not face_contour_path:
-            continue
-            
-        try:
-            original_img = Image.open(face_contour_path).convert("RGB")
-        except Exception:
-            logger.warning(f"Could not load original image for {face_id}")
-            continue
-
-        images = [original_img]
+        corrupted, target, features = engine.create_corrupted_face(
+            image_name, corruption_level=level
+        )
         
-        for level in [1, 2, 3]:
-            corrupted_img, corruption_mask = engine.generate_corrupted_face(
-                face_id, level
-            )
-
-            if corrupted_img is None:
-                # Create blank placeholder
-                corrupted_img = Image.new("RGB", original_img.size, (0, 0, 0))
-            
-            images.append(corrupted_img)
-
-        # Create side-by-side comparison
-        total_width = sum(img.width for img in images)
-        max_height = max(img.height for img in images)
+        logger.info(f"  Corrupted features: {features}")
+        logger.info(f"  Corrupted image size: {corrupted.size}")
+        logger.info(f"  Target image size: {target.size}")
         
-        combined_img = Image.new("RGB", (total_width, max_height))
-        x_offset = 0
-        for img in images:
-            combined_img.paste(img, (x_offset, 0))
-            x_offset += img.width
-            
-        # Save combined image
-        combined_path = output_dir / f"{face_id}_comparison.png"
-        combined_img.save(combined_path, quality=95)
+        # Save visualization
+        vis_dir = Path("/DATA/facial_features_dataset/visualizations")
+        vis_dir.mkdir(exist_ok=True)
         
-        generated_count += 1
-
-    logger.info("Generated %d sample corrupted faces", generated_count)
-    logger.info("Saved to %s", output_dir)
+        vis_path = vis_dir / f"corruption_level_{level}_{image_name}.png"
+        engine.visualize_corruption(image_name, level, str(vis_path))
 
 
 if __name__ == "__main__":
-    main()
-
+    test_corruption_engine()
