@@ -56,7 +56,7 @@ class CorruptionEngine:
             return None
     
     def create_corrupted_face(self,
-                             image_name: str,
+                             image_name: str,   
                              corruption_level: int = 2) -> Tuple[Image.Image, Image.Image, List[str]]:
         """Create corrupted face by compositing random features at correct positions."""
         base_data = self.feature_index[image_name]
@@ -113,9 +113,15 @@ class CorruptionEngine:
             
             # Use current feature's alpha as mask for positioning
             mask = current_feature.split()[3]  # Alpha channel
-            
+            # 1. Load bbox for current image's feature
+            if "bboxes" in base_data and feature_type in base_data["bboxes"]:
+                x_min, y_min, x_max, y_max = base_data["bboxes"][feature_type]
+            else:
+                # Fallback: top-left (legacy mode)
+                x_min, y_min = 0, 0
             # Paste random feature onto corrupted using alpha compositing
-            corrupted.paste(random_feature_resized, (0, 0), mask)
+            corrupted.paste(random_feature_resized, (x_min, y_min), mask)
+
             
             actually_corrupted.append(feature_type)
             logger.debug(f"  Composited {feature_type} from {random_image_name}")
