@@ -84,69 +84,78 @@ class FacialFeaturesExtractor:
                 ])
     
     def process_image(self, image_path: Path, source: str) -> Dict[str, object]:
-        """Process single image."""
+        """Process single image and save full landmark metadata for later indexing."""
         start_time = datetime.now()
         image_name = image_path.stem
-        
+
         result: Dict[str, Any] = {
-            'image_name': image_name,
-            'source': source,
-            'success': False,
-            'errors': [],
+            "image_name": image_name,
+            "source": source,
+            "success": False,
+            "errors": [],
         }
-        
+
         try:
-            img = Image.open(image_path).convert('RGB')
+            # Load image
+            img = Image.open(image_path).convert("RGB")
             img_array = np.array(img)
             img_height, img_width = img_array.shape[:2]
-            
-            landmark_result: Dict[str, Any] = self.landmark_detector.detect( # type: ignore
+
+            # Run landmark detector (unchanged call)
+            landmark_result: Dict[str, Any] = self.landmark_detector.detect(  # type: ignore
                 str(image_path),
                 return_visualization=True,
-                return_groups=True
+                return_groups=True,
             )
-            # landmark_result is a Dict[str, Any]
+
+            # === NEW: save FULL landmark + groups metadata ===
+            # This will include groups[detector_group_name]['bbox'] and ['landmarks_pixel']
             landmark_data: Dict[str, Any] = {
-                'image_name': image_name,
-                'num_landmarks': landmark_result.get('num_landmarks', 0),
+                "image_name": image_name,
+                "image_size": {"width": img_width, "height": img_height},
+                "num_landmarks": landmark_result.get("num_landmarks", 0),
+                "groups": landmark_result.get("groups", {}),
             }
-            
+
             json_path = self.features_dir / "landmarks" / f"{image_name}_landmarks.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(landmark_data, f)
-            
-            if 'visualization' in landmark_result:
+
+            # Save visualization (unchanged)
+            if "visualization" in landmark_result:
                 vis_path = self.features_dir / "landmarks" / f"{image_name}_landmarks_visual.png"
-                landmark_result['visualization'].save(str(vis_path))
-            
-            result['landmarks_success'] = True
-            
-            features_extracted = self._extract_all_features( # type: ignore
+                landmark_result["visualization"].save(str(vis_path))
+
+            result["landmarks_success"] = True
+
+            # Extract feature crops/masks (your existing logic)
+            features_extracted = self._extract_all_features(  # type: ignore
                 img,
                 img_array,
                 landmark_result,
                 image_name,
                 img_width,
-                img_height
+                img_height,
             )
-            result['features_extracted'] = features_extracted
-            result['success'] = True
-            
+
+            result["features_extracted"] = features_extracted
+            result["success"] = True
             processing_time = (datetime.now() - start_time).total_seconds()
-            result['processing_time_sec'] = processing_time
-            
+            result["processing_time_sec"] = processing_time
+
             self._log_result(result)
-            
-            status = "✓" if result['success'] else "✗"
-            logger.info(f"{status} {image_name}: {features_extracted} features, {processing_time:.2f}s") # type: ignore
-            
+            status = "✓" if result["success"] else "✗"
+            logger.info(
+                f"{status} {image_name}: {features_extracted} features, {processing_time:.2f}s"
+            )  # type: ignore
+
         except Exception as e:
             logger.error(f"Failed to process {image_name}: {e}")
-            result['errors'].append(str(e))
+            result["errors"].append(str(e))
             self._log_result(result)
-        
+
         return result
-    
+
     def _extract_all_features(self, img: Image.Image, img_array: NDArray[np.uint8],
                              landmark_result: Dict[str, Any], image_name: str,
                              img_width: int, img_height: int) -> int:
