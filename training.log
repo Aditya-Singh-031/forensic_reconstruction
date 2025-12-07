@@ -1,0 +1,13 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/home/teaching/anaconda3/envs/forensic310/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/teaching/anaconda3/envs/forensic310/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/teaching/G14/forensic_reconstruction/src/train.py", line 254, in <module>
+    main()
+  File "/home/teaching/G14/forensic_reconstruction/src/train.py", line 251, in main
+    Trainer(args).run()
+  File "/home/teaching/G14/forensic_reconstruction/src/train.py", line 62, in __init__
+    self.train_loader, self.val_loader = create_dataloaders(
+TypeError: create_dataloaders() got an unexpected keyword argument 'corruption_level'
