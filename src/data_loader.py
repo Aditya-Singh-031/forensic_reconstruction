@@ -1,314 +1,288 @@
 """
-Data Loader - Phase 3
-PyTorch Dataset and DataLoader for training
-Handles corruption, augmentation, and batching
+Corrupted Face Dataset Loader for Forensic Reconstruction Training.
+Implements random feature corruption with exact position compositing.
+Robust handling for training stability.
 """
 
 import json
 import logging
+import random
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-import random
 
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
-from PIL import Image
-import numpy as np
+from PIL import Image, ImageFile
+import torchvision.transforms as T
+
+# Allow loading truncated images (common issue with large datasets)
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
+# Exclude 'mouth_inner' to prevent artifacts
+CORRUPTIBLE_FEATURES = [
+    "eyes_left", "eyes_right", 
+    "eyebrows_left", "eyebrows_right",
+    "nose", "mouth_outer"
+]
 
 class CorruptedFaceDataset(Dataset):
-    """PyTorch Dataset for corrupted face reconstruction."""
+    """
+    Dataset that generates corrupted faces by randomly compositing features.
+    """
     
-    def __init__(self,
-                 feature_index: Dict,
-                 image_names: List[str],
-                 corruption_level: int = 2,
-                 image_size: Tuple[int, int] = (256, 256),
-                 augment: bool = True):
-        """Initialize dataset.
-        
-        Args:
-            feature_index: Feature index dictionary
-            image_names: List of image names for this split
-            corruption_level: Corruption level (1-3)
-            image_size: Target image size (width, height)
-            augment: Apply data augmentation
-        """
-        self.feature_index = feature_index
-        self.image_names = image_names
+    def __init__(
+        self,
+        feature_index_path: str,
+        split_path: str,
+        split_name: str = "train",
+        corruption_level: int = 2,
+        image_size: int = 512,
+        augment: bool = True,
+    ):
+        self.split_name = split_name
         self.corruption_level = corruption_level
         self.image_size = image_size
-        self.augment = augment
+        self.augment = augment and (split_name == "train")
         
-        # Feature types that can be corrupted
-        self.corruptible_features = [
-            "eyes_left",
-            "eyes_right",
-            "eyebrows_left",
-            "eyebrows_right",
-            "nose",
-            "mouth_outer",
-            "mouth_inner"
-        ]
+        # Load feature index
+        with open(feature_index_path) as f:
+            self.feature_index = json.load(f)
         
-        # Transform for normalization
-        self.normalize = transforms.Normalize(
-            mean=[0.5, 0.5, 0.5],
-            std=[0.5, 0.5, 0.5]
-        )
+        # Load split
+        with open(split_path) as f:
+            splits = json.load(f)
         
-        # Augmentation transforms
-        if augment:
-            self.augment_transform = transforms.Compose([
-                transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        # Filter image_names to ensure they exist in index
+        valid_names = [n for n in splits[split_name] if n in self.feature_index]
+        self.image_names = valid_names
+        
+        # Build feature pools for sampling (Optimization: Pre-build list)
+        self.feature_pools = {ft: [] for ft in CORRUPTIBLE_FEATURES}
+        for img_name, entry in self.feature_index.items():
+            for ft in CORRUPTIBLE_FEATURES:
+                if ft in entry.get("features", {}) and ft in entry.get("bboxes", {}):
+                    self.feature_pools[ft].append(img_name)
+        
+        logger.info(f"Loaded {split_name.upper()} set: {len(self.image_names)} images")
+        
+        # Transforms
+        self.to_tensor = T.ToTensor()
+        self.normalize = T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        
+        if self.augment:
+            self.augment_transform = T.Compose([
+                T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
+                T.RandomGrayscale(p=0.1),
             ])
-        else:
-            self.augment_transform = None
-        
-        logger.info(f"Initialized dataset with {len(self.image_names)} images")
-        logger.info(f"  Corruption level: {self.corruption_level}")
-        logger.info(f"  Image size: {self.image_size}")
-        logger.info(f"  Augmentation: {self.augment}")
-    
-    def __len__(self) -> int:
-        """Return dataset size."""
-        return len(self.image_names)
-    
-    def load_and_resize(self, path: str) -> Image.Image:
-        """Load image and resize to target size.
-        
-        Args:
-            path: Image path
-            
-        Returns:
-            img: Resized PIL Image
-        """
-        img = Image.open(path)
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        img = img.resize(self.image_size, Image.BICUBIC)
-        return img
-    
-    def get_features_to_corrupt(self) -> List[str]:
-        """Determine which features to corrupt based on level.
-        
-        Returns:
-            features: List of feature types to corrupt
-        """
+
+    def _get_corruption_count(self) -> int:
+        """Determine how many features to corrupt."""
+        available = len(CORRUPTIBLE_FEATURES)
         if self.corruption_level == 1:
-            num_features = random.randint(2, 3)
+            return random.randint(1, 2)
         elif self.corruption_level == 2:
-            num_features = random.randint(4, 5)
-        elif self.corruption_level == 3:
-            num_features = random.randint(6, 7)
+            return random.randint(3, 4)
         else:
-            num_features = 4
-        
-        features = random.sample(
-            self.corruptible_features,
-            min(num_features, len(self.corruptible_features))
-        )
-        return features
-    
-    def create_corrupted_face(self, image_name: str) -> Tuple[Image.Image, List[str]]:
-        """Create corrupted face by compositing random features.
-        
-        Args:
-            image_name: Base image name
-            
-        Returns:
-            corrupted: Corrupted face image
-            features: List of corrupted feature names
-        """
-        # Load base face_contour
-        base_path = self.feature_index[image_name]["features"]["face_contour"]
-        base_img = self.load_and_resize(base_path)
-        
-        # Determine features to corrupt
-        features_to_corrupt = self.get_features_to_corrupt()
-        
-        # For simplified version: return base image
-        # Full version would composite random features here
-        # This requires careful position alignment which we'll implement next
-        
-        # TODO: Implement actual feature compositing with position info
-        corrupted = base_img.copy()
-        
-        return corrupted, features_to_corrupt
-    
+            return random.randint(5, available)
+
+    def _load_rgba(self, path: str) -> Optional[Image.Image]:
+        try:
+            img = Image.open(path)
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            return img
+        except Exception:
+            return None
+
+    def __len__(self) -> int:
+        return len(self.image_names)
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        """Get training sample.
-        
-        Args:
-            idx: Sample index
-            
-        Returns:
-            sample: Dictionary with tensors
-                - corrupted: Corrupted face [3, H, W]
-                - target: Ground truth face [3, H, W]
-                - mask: Corruption mask [1, H, W]
         """
+        Get one training sample with robust error handling.
+        If loading fails, try the next index to avoid crashing training.
+        """
+        attempts = 0
+        while attempts < 3:  # Retry up to 3 times
+            try:
+                curr_idx = (idx + attempts) % len(self.image_names)
+                return self._process_item(curr_idx)
+            except Exception as e:
+                attempts += 1
+                # logger.warning(f"Failed to load idx {curr_idx}: {e}")
+        
+        # Fallback: Return simple zero tensors if all retries fail
+        return self._get_empty_sample()
+
+    def _process_item(self, idx: int) -> Dict[str, torch.Tensor]:
         image_name = self.image_names[idx]
-        data = self.feature_index[image_name]
+        entry = self.feature_index[image_name]
         
-        # Create corrupted face
-        corrupted_img, features = self.create_corrupted_face(image_name)
+        # 1. Load Base & Target
+        face_path = entry["features"]["face_contour"]
+        jawline_path = entry["features"]["jawline"]
         
-        # Load target (jawline)
-        target_path = data["features"]["jawline"]
-        target_img = self.load_and_resize(target_path)
+        face_img = self._load_rgba(face_path)
+        target_img = self._load_rgba(jawline_path)
         
-        # Apply augmentation if enabled
-        if self.augment and self.augment_transform is not None:
-            corrupted_img = self.augment_transform(corrupted_img)
+        if face_img is None or target_img is None:
+            raise ValueError("Missing base images")
+
+        # 2. Corrupt
+        corrupted = face_img.copy()
         
-        # Convert to tensors
-        corrupted_tensor = transforms.ToTensor()(corrupted_img)
-        target_tensor = transforms.ToTensor()(target_img)
+        # Mask: 1 channel, size of image
+        w, h = corrupted.size
+        corruption_mask = np.zeros((h, w), dtype=np.float32)
         
-        # Normalize to [-1, 1]
-        corrupted_tensor = self.normalize(corrupted_tensor)
-        target_tensor = self.normalize(target_tensor)
+        k = self._get_corruption_count()
+        feats_to_corrupt = random.sample(CORRUPTIBLE_FEATURES, k)
         
-        # Create corruption mask (simplified: all ones for now)
-        mask = torch.ones(1, self.image_size[1], self.image_size[0])
+        for ft in feats_to_corrupt:
+            # Validate target has slot
+            if ft not in entry["features"] or ft not in entry["bboxes"]: continue
+            
+            # Get placement bbox
+            bbox = entry["bboxes"][ft]
+            x_min, y_min = int(bbox["x_min"]), int(bbox["y_min"])
+            target_w = int(bbox["x_max"] - x_min)
+            target_h = int(bbox["y_max"] - y_min)
+            
+            if target_w <= 0 or target_h <= 0: continue
+            
+            # Sample donor
+            if not self.feature_pools[ft]: continue
+            donor_name = random.choice(self.feature_pools[ft])
+            donor_entry = self.feature_index[donor_name]
+            
+            if ft not in donor_entry["features"]: continue
+            
+            donor_img = self._load_rgba(donor_entry["features"][ft])
+            if donor_img is None: continue
+            
+            # Resize donor
+            donor_resized = donor_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            alpha_mask = donor_resized.split()[3]
+            
+            # Paste
+            corrupted.paste(donor_resized, (x_min, y_min), alpha_mask)
+            
+            # Update binary mask (Robust Slicing)
+            y_end = min(y_min + target_h, h)
+            x_end = min(x_min + target_w, w)
+            
+            # Crop mask to match the safe slice
+            mask_arr = np.array(alpha_mask, dtype=np.float32) / 255.0
+            visible_h = y_end - y_min
+            visible_w = x_end - x_min
+            
+            if visible_h > 0 and visible_w > 0:
+                mask_crop = mask_arr[:visible_h, :visible_w]
+                corruption_mask[y_min:y_end, x_min:x_end] = np.maximum(
+                    corruption_mask[y_min:y_end, x_min:x_end],
+                    mask_crop
+                )
+
+        # 3. Post-Process
+        # Convert to RGB (white background handling)
+        def to_rgb(img_rgba):
+            bg = Image.new("RGB", img_rgba.size, (255, 255, 255))
+            bg.paste(img_rgba, (0, 0), img_rgba)
+            return bg
+
+        corrupted_rgb = to_rgb(corrupted)
+        target_rgb = to_rgb(target_img)
         
+        # Resize
+        if self.image_size != w:
+            corrupted_rgb = corrupted_rgb.resize((self.image_size, self.image_size), Image.Resampling.LANCZOS)
+            target_rgb = target_rgb.resize((self.image_size, self.image_size), Image.Resampling.LANCZOS)
+            # Resize mask (Nearest Neighbor to keep binary-ish)
+            mask_img = Image.fromarray(corruption_mask)
+            mask_img = mask_img.resize((self.image_size, self.image_size), Image.Resampling.NEAREST)
+            corruption_mask = np.array(mask_img)
+
+        # Augment (Simultaneously)
+        if self.augment:
+            # We seed the RNG to apply the EXACT SAME transform to input & target
+            # This is critical so they stay pixel-aligned
+            seed = np.random.randint(2147483647)
+            
+            random.seed(seed)
+            torch.manual_seed(seed)
+            corrupted_rgb = self.augment_transform(corrupted_rgb)
+            
+            random.seed(seed)
+            torch.manual_seed(seed)
+            target_rgb = self.augment_transform(target_rgb)
+
+        # To Tensor
+        inp = self.normalize(self.to_tensor(corrupted_rgb))
+        tgt = self.normalize(self.to_tensor(target_rgb))
+        msk = torch.from_numpy(corruption_mask).unsqueeze(0)  # [1, H, W]
+
         return {
-            'corrupted': corrupted_tensor,
-            'target': target_tensor,
-            'mask': mask,
-            'image_name': image_name,
-            'corrupted_features': features
+            "corrupted": inp,
+            "target": tgt,
+            "mask": msk,
+            "name": image_name
         }
 
+    def _get_empty_sample(self):
+        """Emergency fallback to prevent crashing."""
+        z = torch.zeros((3, self.image_size, self.image_size))
+        m = torch.zeros((1, self.image_size, self.image_size))
+        return {"corrupted": z, "target": z, "mask": m, "name": "error"}
 
 def create_dataloaders(
-    dataset_dir: str = "/DATA/facial_features_dataset",
+    feature_index_path: str,
+    split_path: str,
     batch_size: int = 8,
     num_workers: int = 4,
-    corruption_level: int = 2,
-    image_size: Tuple[int, int] = (256, 256)
-) -> Dict[str, DataLoader]:
-    """Create train/val/test dataloaders.
+    image_size: int = 512,
+):
+    """Factory function."""
+    train_ds = CorruptedFaceDataset(feature_index_path, split_path, "train", corruption_level=2, image_size=image_size)
+    val_ds = CorruptedFaceDataset(feature_index_path, split_path, "val", corruption_level=2, image_size=image_size, augment=False)
     
-    Args:
-        dataset_dir: Dataset root directory
-        batch_size: Batch size
-        num_workers: Number of data loading workers
-        corruption_level: Corruption level (1-3)
-        image_size: Target image size
-        
-    Returns:
-        loaders: Dictionary of DataLoaders
-    """
-    dataset_path = Path(dataset_dir)
-    metadata_dir = dataset_path / "metadata"
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, drop_last=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
     
-    # Load feature index
-    index_path = metadata_dir / "feature_index.json"
-    with open(index_path) as f:
-        feature_index = json.load(f)
-    
-    # Load splits
-    splits_path = metadata_dir / "train_val_test_split.json"
-    with open(splits_path) as f:
-        splits = json.load(f)
-    
-    logger.info(f"Creating dataloaders:")
-    logger.info(f"  Batch size: {batch_size}")
-    logger.info(f"  Num workers: {num_workers}")
-    logger.info(f"  Corruption level: {corruption_level}")
-    
-    # Create datasets
-    train_dataset = CorruptedFaceDataset(
-        feature_index,
-        splits['train'],
-        corruption_level=corruption_level,
-        image_size=image_size,
-        augment=True
-    )
-    
-    val_dataset = CorruptedFaceDataset(
-        feature_index,
-        splits['val'],
-        corruption_level=corruption_level,
-        image_size=image_size,
-        augment=False
-    )
-    
-    test_dataset = CorruptedFaceDataset(
-        feature_index,
-        splits['test'],
-        corruption_level=corruption_level,
-        image_size=image_size,
-        augment=False
-    )
-    
-    # Create dataloaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=True
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True
-    )
-    
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True
-    )
-    
-    logger.info(f"Created dataloaders:")
-    logger.info(f"  Train: {len(train_loader)} batches ({len(train_dataset)} samples)")
-    logger.info(f"  Val:   {len(val_loader)} batches ({len(val_dataset)} samples)")
-    logger.info(f"  Test:  {len(test_loader)} batches ({len(test_dataset)} samples)")
-    
-    return {
-        'train': train_loader,
-        'val': val_loader,
-        'test': test_loader
-    }
+    return train_loader, val_loader
 
-
-def test_dataloader():
-    """Test dataloader with sample batch."""
-    logger.info("Testing dataloader...")
-    
-    # Create loaders
-    loaders = create_dataloaders(batch_size=2, num_workers=0)
-    
-    # Get sample batch
-    train_loader = loaders['train']
-    batch = next(iter(train_loader))
-    
-    logger.info("\nSample batch:")
-    logger.info(f"  Corrupted shape: {batch['corrupted'].shape}")
-    logger.info(f"  Target shape: {batch['target'].shape}")
-    logger.info(f"  Mask shape: {batch['mask'].shape}")
-    logger.info(f"  Image names: {batch['image_name']}")
-    logger.info(f"  Corrupted features: {batch['corrupted_features']}")
-    
-    logger.info("\nDataloader test passed! ✓")
-
-
+# TEST BLOCK
 if __name__ == "__main__":
-    test_dataloader()
+    # Quick Test
+    import matplotlib.pyplot as plt
+    
+    BASE = Path("/home/teaching/G14/forensic_reconstruction/dataset")
+    IDX = BASE / "metadata" / "feature_index.json"
+    SPLIT = BASE / "metadata" / "splits.json"
+    
+    if IDX.exists():
+        ds = CorruptedFaceDataset(str(IDX), str(SPLIT), split_name="train", image_size=512)
+        sample = ds[0]
+        
+        print(f"Sample: {sample['name']}")
+        print(f"Corrupted shape: {sample['corrupted'].shape}")
+        print(f"Mask shape: {sample['mask'].shape}")
+        
+        # Un-normalize for display
+        def denorm(t): return (t * 0.5 + 0.5).permute(1, 2, 0).numpy()
+        
+        fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+        ax[0].imshow(denorm(sample["corrupted"]))
+        ax[0].set_title("Input (Corrupted)")
+        ax[1].imshow(denorm(sample["target"]))
+        ax[1].set_title("Target (Original)")
+        ax[2].imshow(sample["mask"].squeeze(), cmap="gray")
+        ax[2].set_title("Corruption Mask")
+        plt.savefig("dataloader_check.png")
+        print("Saved dataloader_check.png")
