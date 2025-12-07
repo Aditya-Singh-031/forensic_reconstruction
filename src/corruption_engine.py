@@ -29,8 +29,6 @@ CORRUPTIBLE_FEATURES = [
     "nose",
     "mouth_outer",
     "mouth_inner",
-    "ears_left",
-    "ears_right",
 ]
 
 
@@ -53,18 +51,24 @@ class CorruptionEngine:
         except Exception as e:
             logger.error(f"Failed to load {path}: {e}")
             return None
-
     def _choose_features_for_level(self, level: int) -> List[str]:
+        """
+        Level 1: 2 random features
+        Level 2: 4 random features
+        Level 3: ALL features
+        """
         if level == 1:
-            k = random.randint(2, 3)
+            k = 2
+            return random.sample(CORRUPTIBLE_FEATURES, k)
         elif level == 2:
-            k = random.randint(4, 5)
-        elif level == 3:
-            k = random.randint(6, 8)
-        else:
             k = 4
-        k = min(k, len(CORRUPTIBLE_FEATURES))
-        return random.sample(CORRUPTIBLE_FEATURES, k)
+            return random.sample(CORRUPTIBLE_FEATURES, k)
+        elif level == 3:
+            # All 7 features
+            return list(CORRUPTIBLE_FEATURES)
+        else:
+            # default
+            return random.sample(CORRUPTIBLE_FEATURES, 4)
 
     def create_corrupted_face(
         self, image_name: str, level: int = 2
@@ -85,6 +89,7 @@ class CorruptionEngine:
         actually_corrupted: List[str] = []
 
         for ft in features_to_corrupt:
+            # 1) position: must exist for THIS image
             if ft not in entry["bboxes"]:
                 continue
             if ft not in entry["features"]:
@@ -96,7 +101,7 @@ class CorruptionEngine:
             x_max = int(bbox["x_max"])
             y_max = int(bbox["y_max"])
 
-            # Current image's feature (for mask/shape)
+            # current feature F1 (for mask and size)
             current_path = entry["features"][ft]
             current_img = self._load_rgba(current_path)
             if current_img is None:
@@ -104,22 +109,24 @@ class CorruptionEngine:
 
             w, h = current_img.size
 
-            # Donor feature from random image
+            # 2) donor feature F_k from some other image
             donor_image_name = random.choice(self.image_names)
             donor_entry = self.feature_index[donor_image_name]
             if ft not in donor_entry["features"]:
                 continue
+
             donor_path = donor_entry["features"][ft]
             donor_img = self._load_rgba(donor_path)
             if donor_img is None:
                 continue
 
+            # resize donor to match F1 dimensions
             donor_resized = donor_img.resize((w, h), Image.Resampling.LANCZOS)
 
-            # Use current feature alpha as placement mask
+            # 3) mask from F1 (where the original feature was cut out)
             mask = current_img.split()[3]  # alpha channel
 
-            # Paste at correct (x_min, y_min)
+            # 4) paste at EXACT original feature location
             corrupted.paste(donor_resized, (x_min, y_min), mask)
             actually_corrupted.append(ft)
 
