@@ -23,7 +23,7 @@ CORRUPTIBLE_FEATURES = [
     "eyebrows_right",
     "nose",
     "mouth_outer",
-    "mouth_inner",
+    #"mouth_inner",
 ]
 
 
