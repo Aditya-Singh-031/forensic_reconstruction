@@ -1,0 +1,84 @@
+nohup: ignoring input
+INFO:__main__:============================================================
+INFO:__main__:LOADING STABLE DIFFUSION INPAINTING MODEL
+INFO:__main__:============================================================
+INFO:__main__:Loading from: runwayml/stable-diffusion-inpainting
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s][0;93m2025-12-08 00:18:04.594546998 [W:onnxruntime:Default, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+An error occurred while trying to fetch /home/teaching/.cache/huggingface/hub/models--runwayml--stable-diffusion-inpainting/snapshots/8a4288a76071f7280aedbdb3253bdb9e9d5d84bb/unet: Error no file named diffusion_pytorch_model.safetensors found in directory /home/teaching/.cache/huggingface/hub/models--runwayml--stable-diffusion-inpainting/snapshots/8a4288a76071f7280aedbdb3253bdb9e9d5d84bb/unet.
+Defaulting to unsafe serialization. Pass `allow_pickle=False` to raise an error instead.
+Loading pipeline components...:  17%|█▋        | 1/6 [00:00<00:02,  2.07it/s]An error occurred while trying to fetch /home/teaching/.cache/huggingface/hub/models--runwayml--stable-diffusion-inpainting/snapshots/8a4288a76071f7280aedbdb3253bdb9e9d5d84bb/vae: Error no file named diffusion_pytorch_model.safetensors found in directory /home/teaching/.cache/huggingface/hub/models--runwayml--stable-diffusion-inpainting/snapshots/8a4288a76071f7280aedbdb3253bdb9e9d5d84bb/vae.
+Defaulting to unsafe serialization. Pass `allow_pickle=False` to raise an error instead.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading pipeline components...:  67%|██████▋   | 4/6 [00:00<00:00,  5.54it/s]Loading pipeline components...: 100%|██████████| 6/6 [00:00<00:00,  6.81it/s]
+INFO:__main__:✓ VAE loaded (frozen, torch.float16)
+INFO:__main__:✓ Text Encoder loaded (frozen)
+INFO:__main__:✓ UNet loaded (trainable)
+INFO:__main__:  UNet parameters: 859.54M
+INFO:src.data_loader:Loaded TRAIN set: 41592 images
+INFO:src.data_loader:Loaded VAL set: 5199 images
+INFO:src.losses:LPIPS Loss initialized (alex)
+INFO:src.losses:FaceNet Identity Loss initialized
+INFO:src.losses:Loss Config: {'pixel': 1.0, 'perceptual': 0.5, 'identity': 0.05}, hole_weight=6.0
+INFO:__main__:✓ Ready to fine-tune on cuda (torch.float16)
+INFO:__main__:============================================================
+INFO:__main__:
+============================================================
+INFO:__main__:STARTING FINE-TUNING
+INFO:__main__:============================================================
+
+INFO:__main__:
+🎓 CURRICULUM: Level 1
+
+Setting up [LPIPS] perceptual loss: trunk [alex], v[0.1], spatial [off]
+Loading model from: /home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/lpips/weights/v0.1/alex.pth
+Epoch 1:   0%|          | 0/10398 [00:00<?, ?it/s]Epoch 1:   0%|          | 0/10398 [00:02<?, ?it/s, loss=0.0283]Epoch 1:   0%|          | 1/10398 [00:02<7:47:13,  2.70s/it, loss=0.0283]Epoch 1:   0%|          | 1/10398 [00:03<10:04:14,  3.49s/it, loss=0.0283]
+Traceback (most recent call last):
+  File "/home/teaching/anaconda3/envs/forensic310/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/teaching/anaconda3/envs/forensic310/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/teaching/G14/forensic_reconstruction/src/train_sd_finetune.py", line 466, in <module>
+    main()
+  File "/home/teaching/G14/forensic_reconstruction/src/train_sd_finetune.py", line 462, in main
+    trainer.run()
+  File "/home/teaching/G14/forensic_reconstruction/src/train_sd_finetune.py", line 411, in run
+    t_loss = self.train_epoch(epoch)
+  File "/home/teaching/G14/forensic_reconstruction/src/train_sd_finetune.py", line 215, in train_epoch
+    noise_pred = self.unet(
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/diffusers/models/unets/unet_2d_condition.py", line 1280, in forward
+    sample = upsample_block(
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/diffusers/models/unets/unet_2d_blocks.py", line 2458, in forward
+    hidden_states = attn(
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/diffusers/models/transformers/transformer_2d.py", line 427, in forward
+    hidden_states = block(
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/diffusers/models/attention.py", line 1059, in forward
+    ff_output = self.ff(norm_hidden_states)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/diffusers/models/attention.py", line 1731, in forward
+    hidden_states = module(hidden_states)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/diffusers/models/activations.py", line 123, in forward
+    return hidden_states * self.gelu(gate)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 40.00 MiB. GPU 0 has a total capacity of 23.67 GiB of which 27.06 MiB is free. Process 3870808 has 12.90 GiB memory in use. Including non-PyTorch memory, this process has 10.44 GiB memory in use. Of the allocated memory 10.09 GiB is allocated by PyTorch, and 86.36 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
