@@ -50,7 +50,6 @@ class DownBlock(nn.Module):
 class AttentionGate(nn.Module):
     """
     Attention gate for skip connections.
-    Helps model focus on relevant features from the encoder.
     """
     def __init__(self, F_g, F_l, F_int):
         super().__init__()
@@ -82,18 +81,16 @@ class UpBlock(nn.Module):
     def __init__(self, in_ch, out_ch, bilinear=True):
         super().__init__()
         
-        # Enforce bilinear upsampling to avoid checkerboard artifacts
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = ConvBlock(in_ch, out_ch)
         else:
-            self.up = nn.ConvTranspose2d(in_ch, in_ch // 2, 2, stride=2)
-            self.conv = ConvBlock(in_ch, out_ch)
+            self.up = nn.ConvTranspose2d(in_ch // 2, in_ch // 2, 2, stride=2)
+            
+        self.conv = ConvBlock(in_ch, out_ch)
     
     def forward(self, x1, x2):
         x1 = self.up(x1)
         
-        # Handle size mismatch (padding)
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
@@ -105,34 +102,29 @@ class UpBlock(nn.Module):
 
 class UpBlockWithAttention(nn.Module):
     """Upsampling block with attention mechanism."""
-    def __init__(self, in_ch, out_ch, bilinear=True):
+    def __init__(self, in_ch, out_ch, skip_ch, bilinear=True):
         super().__init__()
         
-        # Enforce bilinear
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        # Note: in_ch is the concatenated channel size
-        # We need to reduce channels after concat
-        self.conv = ConvBlock(in_ch, out_ch)
         
-        # Attention Gate dims:
-        # F_g (gating signal) = current decoder features (before upsample, or after? usually inputs)
-        # F_l (skip connection) = encoder features
-        # Input channels to this block are usually [prev_decoder_filters, encoder_filters]
-        # Here we assume standard U-Net channel doubling
-        self.attention = AttentionGate(F_g=in_ch//2, F_l=in_ch//2, F_int=in_ch//4)
+        # in_ch is the total concatenated size (prev_up + skip)
+        # We need to derive internal sizes for attention
+        # Prev layer (gating) has (in_ch - skip_ch) channels
+        gating_ch = in_ch - skip_ch
+        
+        self.attention = AttentionGate(F_g=gating_ch, F_l=skip_ch, F_int=skip_ch//2)
+        self.conv = ConvBlock(in_ch, out_ch)
     
     def forward(self, x1, x2):
-        # x1 = Current Decoder state
-        # x2 = Encoder Skip Connection
+        # x1 = Decoding features (Gating signal)
+        # x2 = Encoder features (Skip connection)
         x1 = self.up(x1)
         
-        # Pad x1 if needed to match x2
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
                         diffY // 2, diffY - diffY // 2])
         
-        # Apply Attention to Skip Connection (x2) using Decoder features (x1) as gate
         x2 = self.attention(g=x1, x=x2)
         
         x = torch.cat([x2, x1], dim=1)
@@ -143,9 +135,6 @@ class UpBlockWithAttention(nn.Module):
 # U-NET MODEL
 # ============================================================
 class UNetReconstruction(nn.Module):
-    """
-    U-Net with attention for face reconstruction.
-    """
     def __init__(self, in_channels=3, out_channels=3, base_channels=64, use_attention=True):
         super().__init__()
         self.use_attention = use_attention
@@ -158,18 +147,37 @@ class UNetReconstruction(nn.Module):
         self.down4 = DownBlock(base_channels*8, base_channels*16) # 1024
         
         # Decoder
-        UpClass = UpBlockWithAttention if use_attention else UpBlock
+        # To fix channel mismatch, we explicitly calculate:
+        # Input = Upsampled(Previous) + Skip(Corresponding Encoder)
         
-        self.up1 = UpClass(base_channels*16, base_channels*8) # 1024 + 512 -> 512
-        self.up2 = UpClass(base_channels*8, base_channels*4)  # 512 + 256 -> 256
-        self.up3 = UpClass(base_channels*4, base_channels*2)  # 256 + 128 -> 128
-        self.up4 = UpClass(base_channels*2, base_channels)    # 128 + 64 -> 64
+        # Block 1: Up(1024) + Skip(512) = 1536 -> Out 512
+        if use_attention:
+            self.up1 = UpBlockWithAttention(1536, 512, skip_ch=512)
+        else:
+            self.up1 = UpBlock(1536, 512)
+            
+        # Block 2: Up(512) + Skip(256) = 768 -> Out 256
+        if use_attention:
+            self.up2 = UpBlockWithAttention(768, 256, skip_ch=256)
+        else:
+            self.up2 = UpBlock(768, 256)
+            
+        # Block 3: Up(256) + Skip(128) = 384 -> Out 128
+        if use_attention:
+            self.up3 = UpBlockWithAttention(384, 128, skip_ch=128)
+        else:
+            self.up3 = UpBlock(384, 128)
+            
+        # Block 4: Up(128) + Skip(64) = 192 -> Out 64
+        if use_attention:
+            self.up4 = UpBlockWithAttention(192, 64, skip_ch=64)
+        else:
+            self.up4 = UpBlock(192, 64)
         
         # Output
-        self.outc = nn.Conv2d(base_channels, out_channels, 1)
+        self.outc = nn.Conv2d(64, out_channels, 1)
         self.tanh = nn.Tanh()
         
-        # Initialize weights
         self._init_weights()
         logger.info(f"UNetReconstruction initialized (attention={use_attention})")
         logger.info(f"  Parameters: {sum(p.numel() for p in self.parameters()) / 1e6:.2f}M")
@@ -179,9 +187,6 @@ class UNetReconstruction(nn.Module):
             if isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None: nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
     
     def forward(self, x):
         # Encoder
@@ -209,14 +214,10 @@ def create_model(model_type='unet_attention', device='cuda', **kwargs):
         raise ValueError(f"Unknown model type: {model_type}")
     return model.to(device)
 
-# ============================================================
-# TEST
-# ============================================================
 if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = create_model('unet_attention', device=device)
     
-    # Dummy input [B, 3, 512, 512]
     x = torch.randn(2, 3, 512, 512).to(device)
     try:
         y = model(x)
