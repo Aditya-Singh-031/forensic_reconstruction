@@ -1,0 +1,172 @@
+2025-12-07 11:44:51,854 - INFO - Initialized CorruptionEngine with 51990 images
+2025-12-07 11:44:51,854 - INFO - Dataset dir: /home/teaching/G14/forensic_reconstruction/dataset
+2025-12-07 11:44:51,854 - INFO - 
+============================================================
+2025-12-07 11:44:51,854 - INFO - IMAGE: 00002
+2025-12-07 11:44:51,854 - INFO - ============================================================
+2025-12-07 11:44:51,861 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:51,861 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:51,861 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:51,861 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:51,862 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:51,862 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:51,862 - DEBUG - Base (face_contour) size: (282, 298)
+2025-12-07 11:44:51,862 - DEBUG - Target (jawline) size: (282, 298)
+2025-12-07 11:44:51,865 - DEBUG - 
+  Processing feature: eyes_right
+2025-12-07 11:44:51,865 - DEBUG -     Bbox: (292, 233, 344, 253)
+2025-12-07 11:44:51,865 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:51,865 - DEBUG - STREAM b'IDAT' 41 2591
+2025-12-07 11:44:51,865 - DEBUG -     Current feature size: 52x20
+2025-12-07 11:44:51,865 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:51,865 - DEBUG - STREAM b'IDAT' 41 1967
+2025-12-07 11:44:51,865 - DEBUG -     Donor: 35184, size: (57, 14)
+2025-12-07 11:44:52,008 - DEBUG -     Mask non-zero pixels: 742/1040
+2025-12-07 11:44:52,008 - DEBUG -     ✓ Pasted at (292, 233)
+2025-12-07 11:44:52,008 - DEBUG - 
+  Processing feature: eyes_left
+2025-12-07 11:44:52,008 - DEBUG -     Bbox: (167, 234, 223, 253)
+2025-12-07 11:44:52,008 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,008 - DEBUG - STREAM b'IDAT' 41 2702
+2025-12-07 11:44:52,008 - DEBUG -     Current feature size: 56x19
+2025-12-07 11:44:52,008 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,008 - DEBUG - STREAM b'IDAT' 41 2672
+2025-12-07 11:44:52,008 - DEBUG -     Donor: 35469, size: (58, 18)
+2025-12-07 11:44:52,009 - DEBUG -     Mask non-zero pixels: 747/1064
+2025-12-07 11:44:52,009 - DEBUG -     ✓ Pasted at (167, 234)
+2025-12-07 11:44:52,009 - DEBUG - 
+Total corrupted: 2
+2025-12-07 11:44:52,054 - INFO - Saved visualization to /home/teaching/G14/forensic_reconstruction/dataset/visualizations/corruption_L1_00002.png
+2025-12-07 11:44:52,054 - INFO -   Corrupted features: ['eyes_right', 'eyes_left']
+2025-12-07 11:44:52,054 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,054 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,054 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,054 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,054 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,055 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,055 - DEBUG - Base (face_contour) size: (282, 298)
+2025-12-07 11:44:52,055 - DEBUG - Target (jawline) size: (282, 298)
+2025-12-07 11:44:52,057 - DEBUG - 
+  Processing feature: eyebrows_left
+2025-12-07 11:44:52,057 - DEBUG -     Bbox: (139, 192, 237, 221)
+2025-12-07 11:44:52,057 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,057 - DEBUG - STREAM b'IDAT' 41 5320
+2025-12-07 11:44:52,057 - DEBUG -     Current feature size: 98x29
+2025-12-07 11:44:52,058 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,058 - DEBUG - STREAM b'IDAT' 41 4613
+2025-12-07 11:44:52,058 - DEBUG -     Donor: 41714, size: (99, 24)
+2025-12-07 11:44:52,058 - DEBUG -     Mask non-zero pixels: 1345/2842
+2025-12-07 11:44:52,058 - DEBUG -     ✓ Pasted at (139, 192)
+2025-12-07 11:44:52,058 - DEBUG - 
+  Processing feature: mouth_inner
+2025-12-07 11:44:52,058 - DEBUG -     ❌ No bbox for mouth_inner
+2025-12-07 11:44:52,058 - DEBUG - 
+  Processing feature: nose
+2025-12-07 11:44:52,058 - DEBUG -     Bbox: (222, 327, 295, 334)
+2025-12-07 11:44:52,058 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,058 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,058 - DEBUG -     Current feature size: 433x351
+2025-12-07 11:44:52,058 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,058 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,058 - DEBUG -     Donor: 52301, size: (445, 347)
+2025-12-07 11:44:52,072 - DEBUG -     Mask non-zero pixels: 2700/151983
+2025-12-07 11:44:52,072 - DEBUG -     ✓ Pasted at (222, 327)
+2025-12-07 11:44:52,072 - DEBUG - 
+  Processing feature: eyes_right
+2025-12-07 11:44:52,072 - DEBUG -     Bbox: (292, 233, 344, 253)
+2025-12-07 11:44:52,072 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,072 - DEBUG - STREAM b'IDAT' 41 2591
+2025-12-07 11:44:52,072 - DEBUG -     Current feature size: 52x20
+2025-12-07 11:44:52,073 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,073 - DEBUG - STREAM b'IDAT' 41 1030
+2025-12-07 11:44:52,073 - DEBUG -     Donor: 19212, size: (54, 9)
+2025-12-07 11:44:52,073 - DEBUG -     Mask non-zero pixels: 742/1040
+2025-12-07 11:44:52,073 - DEBUG -     ✓ Pasted at (292, 233)
+2025-12-07 11:44:52,073 - DEBUG - 
+Total corrupted: 3
+2025-12-07 11:44:52,117 - INFO - Saved visualization to /home/teaching/G14/forensic_reconstruction/dataset/visualizations/corruption_L2_00002.png
+2025-12-07 11:44:52,117 - INFO -   Corrupted features: ['eyebrows_left', 'nose', 'eyes_right']
+2025-12-07 11:44:52,117 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,117 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,117 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,117 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,117 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,117 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,117 - DEBUG - Base (face_contour) size: (282, 298)
+2025-12-07 11:44:52,117 - DEBUG - Target (jawline) size: (282, 298)
+2025-12-07 11:44:52,120 - DEBUG - 
+  Processing feature: eyes_left
+2025-12-07 11:44:52,120 - DEBUG -     Bbox: (167, 234, 223, 253)
+2025-12-07 11:44:52,120 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,120 - DEBUG - STREAM b'IDAT' 41 2702
+2025-12-07 11:44:52,120 - DEBUG -     Current feature size: 56x19
+2025-12-07 11:44:52,120 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,120 - DEBUG - STREAM b'IDAT' 41 2077
+2025-12-07 11:44:52,120 - DEBUG -     Donor: 51533, size: (52, 21)
+2025-12-07 11:44:52,120 - DEBUG -     Mask non-zero pixels: 747/1064
+2025-12-07 11:44:52,121 - DEBUG -     ✓ Pasted at (167, 234)
+2025-12-07 11:44:52,121 - DEBUG - 
+  Processing feature: eyes_right
+2025-12-07 11:44:52,121 - DEBUG -     Bbox: (292, 233, 344, 253)
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IDAT' 41 2591
+2025-12-07 11:44:52,121 - DEBUG -     Current feature size: 52x20
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IDAT' 41 1441
+2025-12-07 11:44:52,121 - DEBUG -     Donor: 16382, size: (50, 12)
+2025-12-07 11:44:52,121 - DEBUG -     Mask non-zero pixels: 742/1040
+2025-12-07 11:44:52,121 - DEBUG -     ✓ Pasted at (292, 233)
+2025-12-07 11:44:52,121 - DEBUG - 
+  Processing feature: eyebrows_left
+2025-12-07 11:44:52,121 - DEBUG -     Bbox: (139, 192, 237, 221)
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IDAT' 41 5320
+2025-12-07 11:44:52,121 - DEBUG -     Current feature size: 98x29
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,121 - DEBUG - STREAM b'IDAT' 41 4541
+2025-12-07 11:44:52,121 - DEBUG -     Donor: 22094, size: (103, 27)
+2025-12-07 11:44:52,122 - DEBUG -     Mask non-zero pixels: 1345/2842
+2025-12-07 11:44:52,122 - DEBUG -     ✓ Pasted at (139, 192)
+2025-12-07 11:44:52,122 - DEBUG - 
+  Processing feature: eyebrows_right
+2025-12-07 11:44:52,122 - DEBUG -     Bbox: (288, 195, 368, 221)
+2025-12-07 11:44:52,122 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,122 - DEBUG - STREAM b'IDAT' 41 3997
+2025-12-07 11:44:52,122 - DEBUG -     Current feature size: 80x26
+2025-12-07 11:44:52,122 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,122 - DEBUG - STREAM b'IDAT' 41 6638
+2025-12-07 11:44:52,122 - DEBUG -     Donor: 20502, size: (103, 26)
+2025-12-07 11:44:52,123 - DEBUG -     Mask non-zero pixels: 981/2080
+2025-12-07 11:44:52,123 - DEBUG -     ✓ Pasted at (288, 195)
+2025-12-07 11:44:52,123 - DEBUG - 
+  Processing feature: nose
+2025-12-07 11:44:52,123 - DEBUG -     Bbox: (222, 327, 295, 334)
+2025-12-07 11:44:52,123 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,123 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,123 - DEBUG -     Current feature size: 433x351
+2025-12-07 11:44:52,123 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,123 - DEBUG - STREAM b'IDAT' 41 65536
+2025-12-07 11:44:52,123 - DEBUG -     Donor: 28172, size: (424, 360)
+2025-12-07 11:44:52,137 - DEBUG -     Mask non-zero pixels: 2700/151983
+2025-12-07 11:44:52,137 - DEBUG -     ✓ Pasted at (222, 327)
+2025-12-07 11:44:52,137 - DEBUG - 
+  Processing feature: mouth_outer
+2025-12-07 11:44:52,137 - DEBUG -     Bbox: (197, 362, 304, 381)
+2025-12-07 11:44:52,137 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,137 - DEBUG - STREAM b'IDAT' 41 3919
+2025-12-07 11:44:52,137 - DEBUG -     Current feature size: 107x19
+2025-12-07 11:44:52,137 - DEBUG - STREAM b'IHDR' 16 13
+2025-12-07 11:44:52,137 - DEBUG - STREAM b'IDAT' 41 3864
+2025-12-07 11:44:52,137 - DEBUG -     Donor: 34646, size: (102, 19)
+2025-12-07 11:44:52,137 - DEBUG -     Mask non-zero pixels: 1415/2033
+2025-12-07 11:44:52,137 - DEBUG -     ✓ Pasted at (197, 362)
+2025-12-07 11:44:52,137 - DEBUG - 
+  Processing feature: mouth_inner
+2025-12-07 11:44:52,137 - DEBUG -     ❌ No bbox for mouth_inner
+2025-12-07 11:44:52,138 - DEBUG - 
+Total corrupted: 6
+2025-12-07 11:44:52,182 - INFO - Saved visualization to /home/teaching/G14/forensic_reconstruction/dataset/visualizations/corruption_L3_00002.png
+2025-12-07 11:44:52,182 - INFO -   Corrupted features: ['eyes_left', 'eyes_right', 'eyebrows_left', 'eyebrows_right', 'nose', 'mouth_outer']
+2025-12-07 11:44:52,182 - INFO - 
+Done. Check visualizations in /home/teaching/G14/forensic_reconstruction/dataset/visualizations
+

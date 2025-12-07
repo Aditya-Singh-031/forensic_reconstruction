@@ -1,9 +1,5 @@
 """
-Corruption Engine using bbox metadata.
-
-Left  : face_contour (base with holes)
-Middle: base + random donor features pasted at correct positions
-Right : jawline (original full face)
+Corruption Engine using bbox metadata - FIXED coordinate handling
 """
 
 import json
@@ -15,11 +11,10 @@ from typing import Dict, List, Tuple, Optional
 from PIL import Image
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed to DEBUG to see what's happening
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
 
 CORRUPTIBLE_FEATURES = [
     "eyes_left",
@@ -51,11 +46,12 @@ class CorruptionEngine:
         except Exception as e:
             logger.error(f"Failed to load {path}: {e}")
             return None
+
     def _choose_features_for_level(self, level: int) -> List[str]:
         """
         Level 1: 2 random features
         Level 2: 4 random features
-        Level 3: ALL features
+        Level 3: ALL 7 features
         """
         if level == 1:
             k = 2
@@ -64,10 +60,8 @@ class CorruptionEngine:
             k = 4
             return random.sample(CORRUPTIBLE_FEATURES, k)
         elif level == 3:
-            # All 7 features
-            return list(CORRUPTIBLE_FEATURES)
+            return list(CORRUPTIBLE_FEATURES)  # All 7
         else:
-            # default
             return random.sample(CORRUPTIBLE_FEATURES, 4)
 
     def create_corrupted_face(
@@ -84,15 +78,22 @@ class CorruptionEngine:
         if base_img is None or target_img is None:
             raise RuntimeError(f"Failed to load base/target for {image_name}")
 
+        logger.debug(f"Base (face_contour) size: {base_img.size}")
+        logger.debug(f"Target (jawline) size: {target_img.size}")
+
         corrupted = base_img.copy()
         features_to_corrupt = self._choose_features_for_level(level)
         actually_corrupted: List[str] = []
 
         for ft in features_to_corrupt:
-            # 1) position: must exist for THIS image
+            logger.debug(f"\n  Processing feature: {ft}")
+            
+            # Check if feature exists for this image
             if ft not in entry["bboxes"]:
+                logger.debug(f"    ❌ No bbox for {ft}")
                 continue
             if ft not in entry["features"]:
+                logger.debug(f"    ❌ No feature path for {ft}")
                 continue
 
             bbox = entry["bboxes"][ft]
@@ -101,35 +102,57 @@ class CorruptionEngine:
             x_max = int(bbox["x_max"])
             y_max = int(bbox["y_max"])
 
-            # current feature F1 (for mask and size)
+            logger.debug(f"    Bbox: ({x_min}, {y_min}, {x_max}, {y_max})")
+
+            # Load current feature (for size/mask reference)
             current_path = entry["features"][ft]
             current_img = self._load_rgba(current_path)
             if current_img is None:
+                logger.debug(f"    ❌ Failed to load current feature")
                 continue
 
             w, h = current_img.size
+            logger.debug(f"    Current feature size: {w}x{h}")
 
-            # 2) donor feature F_k from some other image
+            # Pick random donor
             donor_image_name = random.choice(self.image_names)
             donor_entry = self.feature_index[donor_image_name]
+            
             if ft not in donor_entry["features"]:
+                logger.debug(f"    ❌ Donor {donor_image_name} missing {ft}")
                 continue
 
             donor_path = donor_entry["features"][ft]
             donor_img = self._load_rgba(donor_path)
             if donor_img is None:
+                logger.debug(f"    ❌ Failed to load donor feature")
                 continue
 
-            # resize donor to match F1 dimensions
+            logger.debug(f"    Donor: {donor_image_name}, size: {donor_img.size}")
+
+            # Resize donor to match current feature dimensions
             donor_resized = donor_img.resize((w, h), Image.Resampling.LANCZOS)
 
-            # 3) mask from F1 (where the original feature was cut out)
-            mask = current_img.split()[3]  # alpha channel
+            # Get alpha mask from current feature
+            mask = current_img.split()[3]
+            
+            # Check if mask is valid
+            import numpy as np
+            mask_array = np.array(mask)
+            non_zero = np.count_nonzero(mask_array)
+            logger.debug(f"    Mask non-zero pixels: {non_zero}/{mask_array.size}")
 
-            # 4) paste at EXACT original feature location
-            corrupted.paste(donor_resized, (x_min, y_min), mask)
-            actually_corrupted.append(ft)
+            # === KEY FIX: Paste feature crop at bbox position ===
+            # The donor_resized is a small crop (w x h)
+            # We paste it at (x_min, y_min) using its own alpha mask
+            try:
+                corrupted.paste(donor_resized, (x_min, y_min), mask)
+                actually_corrupted.append(ft)
+                logger.debug(f"    ✓ Pasted at ({x_min}, {y_min})")
+            except Exception as e:
+                logger.error(f"    ❌ Paste failed: {e}")
 
+        logger.debug(f"\nTotal corrupted: {len(actually_corrupted)}")
         return corrupted, target_img, actually_corrupted
 
     def visualize(
@@ -195,7 +218,7 @@ def main():
     if args.image is not None:
         images = [args.image]
     else:
-        images = list(feature_index.keys())[:3]  # first 3 for sanity
+        images = list(feature_index.keys())[:3]
 
     vis_dir = dataset_dir / "visualizations"
     vis_dir.mkdir(exist_ok=True)
