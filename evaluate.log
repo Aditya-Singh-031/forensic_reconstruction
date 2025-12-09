@@ -1,4 +1,5 @@
 nohup: ignoring input
+INFO:__main__:Running on CPU with 32 threads to avoid GPU OOM.
 INFO:__main__:Using checkpoint: /home/teaching/G14/forensic_reconstruction/output/training_run_1/checkpoints/best_model.pth
 INFO:src.data_loader:Loaded TEST set: 5199 images
 INFO:__main__:Loaded TEST set: 5199 images
@@ -9,28 +10,4 @@ INFO:src.losses:LPIPS Loss initialized (alex)
 INFO:__main__:Starting evaluation...
 Setting up [LPIPS] perceptual loss: trunk [alex], v[0.1], spatial [off]
 Loading model from: /home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/lpips/weights/v0.1/alex.pth
-  0%|          | 0/650 [00:00<?, ?it/s]/home/teaching/G14/forensic_reconstruction/src/evaluate.py:102: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
-  with autocast():
-  0%|          | 0/650 [00:03<?, ?it/s]
-Traceback (most recent call last):
-  File "/home/teaching/anaconda3/envs/forensic310/lib/python3.10/runpy.py", line 196, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/teaching/anaconda3/envs/forensic310/lib/python3.10/runpy.py", line 86, in _run_code
-    exec(code, run_globals)
-  File "/home/teaching/G14/forensic_reconstruction/src/evaluate.py", line 143, in <module>
-    evaluate()
-  File "/home/teaching/G14/forensic_reconstruction/src/evaluate.py", line 103, in evaluate
-    reconstructed = model(corrupted)
-  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/home/teaching/G14/forensic_reconstruction/src/model.py", line 203, in forward
-    x = self.up4(x, x1)
-  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/teaching/G14/forensic_reconstruction/venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/home/teaching/G14/forensic_reconstruction/src/model.py", line 130, in forward
-    x = torch.cat([x2, x1], dim=1)
-torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.50 GiB. GPU 0 has a total capacity of 23.67 GiB of which 526.88 MiB is free. Process 4179520 has 19.03 GiB memory in use. Including non-PyTorch memory, this process has 3.82 GiB memory in use. Of the allocated memory 2.46 GiB is allocated by PyTorch, and 1.12 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+  0%|          | 0/650 [00:00<?, ?it/s]  0%|          | 1/650 [00:15<2:45:20, 15.29s/it]  0%|          | 2/650 [00:31<2:50:37, 15.80s/it]  0%|          | 3/650 [00:43<2:30:29, 13.96s/it]  1%|          | 4/650 [00:53<2:15:19, 12.57s/it]

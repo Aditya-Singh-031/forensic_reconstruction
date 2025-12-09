@@ -1,10 +1,11 @@
 """
-Inference Script.
+Inference Script (CPU Optimized).
 Run reconstruction on specific images to generate "Before vs After" results.
 """
 
 import torch
 import logging
+import os
 from pathlib import Path
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
@@ -17,7 +18,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def run_inference(count=5):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # Force CPU
+    device = 'cpu'
     
     # Paths
     base_dir = Path("/home/teaching/G14/forensic_reconstruction")
@@ -32,29 +34,26 @@ def run_inference(count=5):
     model = create_model('unet_attention', device=device)
     try:
         ckpt = torch.load(checkpoint_path, map_location=device)
-        # FIX: Key is 'model'
-        model.load_state_dict(ckpt['model'])
+        # Handle key mismatch gracefully
+        state_dict = ckpt['model'] if 'model' in ckpt else ckpt['model_state_dict']
+        model.load_state_dict(state_dict)
         model.eval()
         logger.info(f"Loaded model from Epoch {ckpt['epoch']}")
-    except FileNotFoundError:
-        logger.error("Checkpoint not found.")
-        return
-    except KeyError:
-        logger.error(f"Checkpoint key error. Keys found: {ckpt.keys()}")
+    except Exception as e:
+        logger.error(f"Error loading checkpoint: {e}")
         return
 
-    # 2. Direct Dataset Creation (Level 3 Corruption for Demo)
+    # 2. Direct Dataset Creation (Level 3 Corruption)
     test_dataset = CorruptedFaceDataset(
         feature_index_path=str(index_path),
         split_path=str(split_path),
         split_name="test",
-        corruption_level=3, # Hard mode for demo
+        corruption_level=3, 
         image_size=512,
         augment=False
     )
     
-    # Batch size 1 to process individually
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=2)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=0)
     
     logger.info(f"Running inference on {count} random samples...")
     
@@ -68,18 +67,17 @@ def run_inference(count=5):
             corrupted = batch['corrupted'].to(device)
             target = batch['target'].to(device)
             
-            # Reconstruct
+            # Reconstruct (No autocast)
             reconstructed = model(corrupted)
             
-            # Prepare visualization: Input | Output | Target
-            # Denormalize [-1, 1] -> [0, 1]
+            # Prepare visualization
             def denorm(x): return (x * 0.5 + 0.5).clamp(0, 1)
             
             stack = torch.cat([
                 denorm(corrupted[0]), 
                 denorm(reconstructed[0]), 
                 denorm(target[0])
-            ], dim=2) # Concatenate horizontally
+            ], dim=2) 
             
             # Save
             save_path = output_dir / f"result_{name}.png"
