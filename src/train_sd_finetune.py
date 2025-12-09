@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from torchvision.utils import save_image, make_grid
 from tqdm import tqdm
 import numpy as np
+from torch.cuda.amp import GradScaler, autocast
 
 from diffusers import StableDiffusionInpaintPipeline, DDPMScheduler
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -38,7 +39,9 @@ class SDFineTuner:
         self.args = args
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.start_epoch = 1
-        
+        self.scaler = GradScaler(enabled=self.dtype == torch.float16)
+        self.grad_accum = getattr(args, "grad_accum", 1)
+
         # Set dtype
         self.dtype = torch.float16 if args.use_fp16 else torch.float32
         
@@ -450,7 +453,8 @@ def main():
     
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--lr", type=float, default=5e-6)
+    parser.add_argument("--grad-accum", type=int, default=2)
+    parser.add_argument("--lr", type=float, default=1e-6)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--log-interval", type=int, default=500)
     parser.add_argument("--use-fp16", action="store_true", default=True)
