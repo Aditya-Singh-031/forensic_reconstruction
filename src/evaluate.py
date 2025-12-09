@@ -1,14 +1,15 @@
 """
 Evaluation Script for Forensic Face Reconstruction.
 Calculates PSNR, SSIM, and LPIPS on the held-out TEST set.
+CPU-Optimized Version.
 """
 
 import torch
 import logging
+import os
 from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
-from torch.cuda.amp import autocast
 from torch.utils.data import DataLoader
 
 # Absolute imports
@@ -36,9 +37,15 @@ def compute_ssim(pred, target):
            ((mu_p**2 + mu_t**2 + C1) * (var_p + var_t + C2))
 
 def evaluate():
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # 1. Force CPU
+    device = 'cpu'
     
-    # 1. Paths
+    # Optimization: Use all available cores
+    num_cores = os.cpu_count()
+    torch.set_num_threads(num_cores)
+    logger.info(f"Running on CPU with {num_cores} threads to avoid GPU OOM.")
+    
+    # Paths
     base_dir = Path("/home/teaching/G14/forensic_reconstruction")
     checkpoint_path = base_dir / "output/training_run_1/checkpoints/best_model.pth"
     index_path = base_dir / "dataset/metadata/feature_index.json"
@@ -46,8 +53,7 @@ def evaluate():
     
     logger.info(f"Using checkpoint: {checkpoint_path}")
 
-    # 2. Direct Dataset Creation (Bypassing factory function to avoid errors)
-    # We use Level 3 (Hard) corruption for the final test
+    # 2. Dataset
     test_dataset = CorruptedFaceDataset(
         feature_index_path=str(index_path),
         split_path=str(split_path),
@@ -57,12 +63,15 @@ def evaluate():
         augment=False
     )
     
+    # Use fewer workers for DataLoader on CPU to prevent thread contention
+    loader_workers = max(1, min(4, num_cores // 4))
+    
     test_loader = DataLoader(
         test_dataset, 
         batch_size=8, 
         shuffle=False, 
-        num_workers=4,
-        pin_memory=True
+        num_workers=loader_workers,
+        pin_memory=False # No pinning needed for CPU
     )
     
     logger.info(f"Loaded TEST set: {len(test_dataset)} images")
@@ -71,10 +80,15 @@ def evaluate():
     model = create_model('unet_attention', device=device)
     try:
         ckpt = torch.load(checkpoint_path, map_location=device)
-        model.load_state_dict(ckpt['model_state_dict'])
+        # Use valid key
+        state_dict = ckpt['model'] if 'model' in ckpt else ckpt['model_state_dict']
+        model.load_state_dict(state_dict)
         logger.info(f"Loaded best model from epoch {ckpt['epoch']}")
     except FileNotFoundError:
         logger.error("Checkpoint not found! Run training first.")
+        return
+    except KeyError:
+        logger.error(f"Checkpoint key error. Available keys: {ckpt.keys()}")
         return
 
     model.eval()
@@ -96,10 +110,10 @@ def evaluate():
             corrupted = batch['corrupted'].to(device)
             target = batch['target'].to(device)
             
-            with autocast():
-                reconstructed = model(corrupted)
+            # No autocast on CPU for stability
+            reconstructed = model(corrupted)
             
-            # Calculate metrics per sample
+            # Calculate metrics
             for i in range(len(corrupted)):
                 p = reconstructed[i]
                 t = target[i]
@@ -108,11 +122,10 @@ def evaluate():
                 metrics['ssim'].append(compute_ssim(p, t).item())
                 
                 if lpips_metric:
-                    # LPIPS expects [1, 3, H, W]
                     l_val = lpips_metric(p.unsqueeze(0), t.unsqueeze(0)).item()
                     metrics['lpips'].append(l_val)
 
-    # 6. Aggregate & Save
+    # 6. Aggregate
     avg_psnr = sum(metrics['psnr']) / len(metrics['psnr'])
     avg_ssim = sum(metrics['ssim']) / len(metrics['ssim'])
     avg_lpips = sum(metrics['lpips']) / len(metrics['lpips']) if metrics['lpips'] else 0.0
@@ -131,10 +144,8 @@ def evaluate():
         output_path = base_dir / "output/training_run_1/test_metrics.csv"
         df.to_csv(output_path, index=False)
         logger.info(f"Saved detailed metrics to {output_path}")
-    except ImportError:
-        logger.warning("Pandas not found. Skipped saving CSV.")
-    except Exception as e:
-        logger.error(f"Could not save CSV: {e}")
+    except:
+        pass
 
 if __name__ == "__main__":
     evaluate()

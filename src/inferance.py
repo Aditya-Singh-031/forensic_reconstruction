@@ -32,11 +32,15 @@ def run_inference(count=5):
     model = create_model('unet_attention', device=device)
     try:
         ckpt = torch.load(checkpoint_path, map_location=device)
-        model.load_state_dict(ckpt['model_state_dict'])
+        # FIX: Key is 'model'
+        model.load_state_dict(ckpt['model'])
         model.eval()
         logger.info(f"Loaded model from Epoch {ckpt['epoch']}")
     except FileNotFoundError:
         logger.error("Checkpoint not found.")
+        return
+    except KeyError:
+        logger.error(f"Checkpoint key error. Keys found: {ckpt.keys()}")
         return
 
     # 2. Direct Dataset Creation (Level 3 Corruption for Demo)
@@ -56,6 +60,7 @@ def run_inference(count=5):
     
     # 3. Process
     with torch.no_grad():
+        found = 0
         for i, batch in enumerate(test_loader):
             if i >= count: break
             
