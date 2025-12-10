@@ -2,12 +2,57 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 
-# Other (add any large data files you don't want to track)
-*.mp3
+# Virtual Environment
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Model files (too large for GitHub)
+models/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
 *.onnx
-*.jpeg
+
+# Output and logs
+output/
+logs/
+*.log
+debug.log
+training.log
+evaluate.log
+
+# Dataset (if large)
+dataset/
+*.h5
+*.hdf5
+
+# Images (except small samples)
 *.png
+*.jpg
 *.jpeg
 *.gif
 *.bmp
@@ -17,8 +62,24 @@ __pycache__/
 *.svg
 *.heic
 *.heif
-*.heif-srgb
-# Project Folders
-models/
-output/
-logs/
+
+# Audio/Video
+*.mp3
+*.mp4
+*.avi
+*.wav
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+*.cache
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Keep small sample images if needed (uncomment to track)
+# !samples/**/*.png
+# !output/final_demo/*.png
+sd_training.log
