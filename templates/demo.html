@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Forensic Reconstruction System v2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Courier New', monospace; }
+        .terminal { background: #000; border: 1px solid #334155; height: 150px; overflow-y: auto; padding: 10px; font-size: 0.9em; }
+        .log-line { margin: 2px 0; }
+        .success { color: #4ade80; }
+        .info { color: #60a5fa; }
+        .warn { color: #facc15; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+        .scan-line {
+            width: 100%; height: 2px; background: #4ade80; opacity: 0.5;
+            position: absolute; top: 0; animation: scan 2s linear infinite; display: none;
+        }
+        @keyframes scan { 0% {top: 0;} 100% {top: 100%;} }
+        .img-container { position: relative; overflow: hidden; border: 1px solid #475569; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-shield-halved text-red-500 text-2xl"></i>
+            <h1 class="text-xl font-bold tracking-wider text-slate-100">FORENSIC RECONSTRUCTION SYSTEM <span class="text-xs text-slate-500">v2.1.0 (SECURE)</span></h1>
+        </div>
+        <div class="flex gap-4 text-sm">
+            <div class="flex items-center gap-2"><span class="w-2 h-2 bg-green-500 rounded-full"></span> SYSTEM ONLINE</div>
+            <div class="flex items-center gap-2"><span class="w-2 h-2 bg-green-500 rounded-full"></span> DATABASE CONNECTED</div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex gap-4 p-4 overflow-hidden">
+        
+        <div class="w-1/3 flex flex-col gap-4">
+            
+            <div class="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-lg">
+                <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2"><i class="fa-solid fa-keyboard mr-2"></i>CASE INPUT</h2>
+                
+                <div class="mb-4">
+                    <label class="block text-sm text-slate-400 mb-2">Input Mode</label>
+                    <div class="flex gap-2">
+                        <button onclick="setMode('text')" id="btn-text" class="flex-1 bg-blue-600 hover:bg-blue-700 p-2 rounded text-sm transition font-bold border border-blue-400">TEXT</button>
+                        <button onclick="setMode('voice')" id="btn-voice" class="flex-1 bg-slate-700 hover:bg-slate-600 p-2 rounded text-sm transition border border-slate-600">VOICE</button>
+                    </div>
+                </div>
+
+                <div class="mb-6 relative">
+                    <label class="block text-sm text-slate-400 mb-2">Description / Audio</label>
+                    
+                    <textarea id="description" class="w-full bg-slate-900 border border-slate-600 rounded p-3 text-sm focus:border-blue-500 focus:outline-none h-32 resize-none" placeholder="Enter witness description here..."></textarea>
+                    
+                    <div id="voice-overlay" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center hidden rounded border border-red-500/50">
+                        <div id="mic-icon" class="text-4xl text-slate-500 mb-2"><i class="fa-solid fa-microphone"></i></div>
+                        <p id="voice-status" class="text-xs text-slate-400">Click to Record</p>
+                    </div>
+                </div>
+
+                <button onclick="runPipeline()" id="run-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-microchip"></i> INITIATE RECONSTRUCTION
+                </button>
+            </div>
+
+            <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1 flex flex-col">
+                <h2 class="text-sm font-bold mb-2 text-slate-400"><i class="fa-solid fa-terminal mr-2"></i>SYSTEM LOGS</h2>
+                <div id="terminal" class="terminal flex-1 font-mono text-xs">
+                    <div class="log-line info">[SYSTEM] Ready for input...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-2/3 bg-slate-800 p-6 rounded-lg border border-slate-700 flex flex-col">
+            <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2 flex justify-between">
+                <span><i class="fa-solid fa-images mr-2"></i>FORENSIC ANALYSIS BOARD</span>
+                <span id="match-score" class="text-green-400 hidden">MATCH: 0.0%</span>
+            </h2>
+
+            <div class="grid grid-cols-3 gap-4 h-full">
+                <div class="flex flex-col h-full">
+                    <span class="text-xs text-slate-400 mb-1 font-bold">EVIDENCE (CORRUPTED)</span>
+                    <div class="img-container bg-black rounded h-64 flex items-center justify-center relative">
+                        <div id="scan-1" class="scan-line"></div>
+                        <img id="img-input" class="max-h-full max-w-full hidden" alt="Input">
+                        <span id="placeholder-1" class="text-slate-600 text-4xl"><i class="fa-regular fa-image"></i></span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col h-full">
+                    <span class="text-xs text-blue-400 mb-1 font-bold">AI RECONSTRUCTION</span>
+                    <div class="img-container bg-black rounded h-64 flex items-center justify-center border-blue-500/50 border-2 relative">
+                        <div id="scan-2" class="scan-line"></div>
+                        <img id="img-result" class="max-h-full max-w-full hidden" alt="Result">
+                        <span id="placeholder-2" class="text-slate-600 text-4xl"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col h-full">
+                    <span class="text-xs text-green-400 mb-1 font-bold">DATABASE MATCH</span>
+                    <div class="img-container bg-black rounded h-64 flex items-center justify-center relative">
+                        <img id="img-match" class="max-h-full max-w-full hidden" alt="Match">
+                        <span id="placeholder-3" class="text-slate-600 text-4xl"><i class="fa-solid fa-database"></i></span>
+                    </div>
+                    <div id="match-details" class="mt-4 p-3 bg-slate-900 rounded text-xs hidden">
+                        <p class="text-slate-400">RECORD ID:</p>
+                        <p class="font-bold text-white mb-2" id="rec-id">---</p>
+                        <p class="text-slate-400">FEATURES:</p>
+                        <p class="font-bold text-white" id="rec-features">---</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let currentMode = 'text';
+
+        function log(msg, type='info') {
+            const term = document.getElementById('terminal');
+            const line = document.createElement('div');
+            line.className = `log-line ${type}`;
+            const time = new Date().toLocaleTimeString('en-US', {hour12: false, hour: "2-digit", minute:"2-digit", second:"2-digit"});
+            line.innerText = `[${time}] ${msg}`;
+            term.appendChild(line);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-text').className = mode === 'text' ? 
+                "flex-1 bg-blue-600 hover:bg-blue-700 p-2 rounded text-sm transition font-bold border border-blue-400" : 
+                "flex-1 bg-slate-700 hover:bg-slate-600 p-2 rounded text-sm transition border border-slate-600";
+            
+            document.getElementById('btn-voice').className = mode === 'voice' ? 
+                "flex-1 bg-blue-600 hover:bg-blue-700 p-2 rounded text-sm transition font-bold border border-blue-400" : 
+                "flex-1 bg-slate-700 hover:bg-slate-600 p-2 rounded text-sm transition border border-slate-600";
+
+            const overlay = document.getElementById('voice-overlay');
+            if (mode === 'voice') {
+                overlay.classList.remove('hidden');
+                overlay.onclick = simulateRecording;
+                log("Switched to Voice Input Mode. Microphone Ready.");
+            } else {
+                overlay.classList.add('hidden');
+                log("Switched to Text Input Mode.");
+            }
+        }
+
+        function simulateRecording() {
+            const icon = document.getElementById('mic-icon');
+            const status = document.getElementById('voice-status');
+            const textarea = document.getElementById('description');
+            
+            if (status.innerText === "Recording...") return;
+
+            // Simulation UI
+            icon.classList.add('text-red-500', 'blink');
+            icon.classList.remove('text-slate-500');
+            status.innerText = "Recording...";
+            status.className = "text-red-500 font-bold";
+            log("Microphone activated. Recording...", "warn");
+
+            setTimeout(() => {
+                // Stop recording simulation
+                icon.classList.remove('text-red-500', 'blink');
+                icon.classList.add('text-slate-500');
+                status.innerText = "Processing...";
+                status.className = "text-blue-400";
+                log("Processing audio stream...", "info");
+
+                setTimeout(() => {
+                    // "Transcribe" result
+                    const sampleText = "Male suspect, around 30 years old, dark hair, angry expression.";
+                    textarea.value = sampleText;
+                    status.innerText = "Click to Record";
+                    status.className = "text-xs text-slate-400";
+                    document.getElementById('voice-overlay').classList.add('hidden'); // Hide overlay to show text
+                    setMode('text'); // Switch back to see text
+                    log(`Transcription complete: "${sampleText}"`, "success");
+                }, 1000);
+            }, 3000);
+        }
+
+        async function runPipeline() {
+            const desc = document.getElementById('description').value;
+            if (!desc) { log("Error: No description provided.", "warn"); return; }
+
+            const btn = document.getElementById('run-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> PROCESSING...';
+            
+            // Clear previous
+            document.querySelectorAll('img').forEach(img => img.classList.add('hidden'));
+            document.querySelectorAll('.img-container span').forEach(span => span.classList.remove('hidden'));
+            document.getElementById('match-details').classList.add('hidden');
+            document.getElementById('match-score').classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description: desc, mode: currentMode })
+                });
+                
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // Simulate step-by-step logs for effect
+                    let delay = 0;
+                    data.logs.forEach(msg => {
+                        setTimeout(() => log(msg, "info"), delay);
+                        delay += 300;
+                    });
+
+                    setTimeout(() => {
+                        // Show Images
+                        document.getElementById('img-input').src = data.images.input;
+                        document.getElementById('img-result').src = data.images.result;
+                        document.getElementById('img-match').src = data.images.match;
+
+                        document.querySelectorAll('img').forEach(img => img.classList.remove('hidden'));
+                        document.querySelectorAll('.img-container span').forEach(span => span.classList.add('hidden'));
+                        
+                        // Show Details
+                        document.getElementById('match-score').innerText = `MATCH: ${data.match_info.confidence}`;
+                        document.getElementById('match-score').classList.remove('hidden');
+                        
+                        document.getElementById('rec-id').innerText = data.match_info.id;
+                        document.getElementById('rec-features').innerText = data.match_info.features.join(", ");
+                        document.getElementById('match-details').classList.remove('hidden');
+
+                        log("✅ Pipeline completed successfully.", "success");
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fa-solid fa-microchip"></i> INITIATE RECONSTRUCTION';
+                    }, delay + 500);
+                } else {
+                    log("Server Error: " + data.error, "warn");
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-microchip"></i> INITIATE RECONSTRUCTION';
+                }
+
+            } catch (e) {
+                log("Network Error: " + e, "warn");
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-microchip"></i> INITIATE RECONSTRUCTION';
+            }
+        }
+    </script>
+</body>
+</html>

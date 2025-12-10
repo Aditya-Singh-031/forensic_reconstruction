@@ -1,6 +1,7 @@
 """
 Inference Script.
 Run reconstruction on specific images to generate "Before vs After" results.
+FORCE CPU VERSION.
 """
 
 import torch
@@ -16,11 +17,12 @@ from src.model import create_model
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def run_inference(count=10):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+def run_inference(count=10, specific_id=None):
+    # FORCE CPU
+    device = 'cpu'
     
     # Paths
-    base_dir = Path("/home/teaching/G14/forensic_reconstruction")
+    base_dir = Path("./")
     output_dir = base_dir / "output/inference_results"
     checkpoint_path = base_dir / "output/training_run_1/checkpoints/best_model.pth"
     index_path = base_dir / "dataset/metadata/feature_index.json"
@@ -31,63 +33,72 @@ def run_inference(count=10):
     # 1. Load Model
     model = create_model('unet_attention', device=device)
     try:
+        # Map location ensures weights load to CPU
         ckpt = torch.load(checkpoint_path, map_location=device)
-        # Handle potential key mismatch
         state_dict = ckpt['model'] if 'model' in ckpt else ckpt['model_state_dict']
         model.load_state_dict(state_dict)
         model.eval()
-        logger.info(f"Loaded model from Epoch {ckpt['epoch']}")
+        logger.info(f"Loaded model from Epoch {ckpt.get('epoch', '?')}")
     except FileNotFoundError:
         logger.error("Checkpoint not found.")
-        return
+        return []
     except KeyError:
         logger.error(f"Checkpoint key error. Keys found: {ckpt.keys()}")
-        return
+        return []
 
-    # 2. Direct Dataset Creation (Level 3 Corruption for Demo)
+    # 2. Direct Dataset Creation
     test_dataset = CorruptedFaceDataset(
         feature_index_path=str(index_path),
         split_path=str(split_path),
         split_name="test",
-        corruption_level=3, # Hard mode for demo
+        corruption_level=3,
         image_size=512,
         augment=False
     )
     
-    # Batch size 1 to process individually
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=2)
+    # Num workers 0 is safer for CPU to avoid overhead/hangs
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=0)
     
     logger.info(f"Running inference on {count} random samples...")
     
+    saved_files = []
+
     # 3. Process
     with torch.no_grad():
         found = 0
         for i, batch in enumerate(test_loader):
-            if i >= count: break
-            
             name = batch['name'][0]
+            
+            if specific_id and name != specific_id:
+                continue
+
             corrupted = batch['corrupted'].to(device)
             target = batch['target'].to(device)
             
             # Reconstruct
             reconstructed = model(corrupted)
             
-            # Prepare visualization: Input | Output | Target
-            # Denormalize [-1, 1] -> [0, 1]
+            # Prepare visualization
             def denorm(x): return (x * 0.5 + 0.5).clamp(0, 1)
             
             stack = torch.cat([
                 denorm(corrupted[0]), 
                 denorm(reconstructed[0]), 
                 denorm(target[0])
-            ], dim=2) # Concatenate horizontally
+            ], dim=2) 
             
             # Save
             save_path = output_dir / f"result_{name}.png"
             save_image(stack, save_path)
             logger.info(f"Saved: {save_path}")
+            saved_files.append(str(save_path))
 
+            found += 1
+            if found >= count:
+                break
+    
     logger.info(f"Done! Results in {output_dir}")
+    return saved_files
 
 if __name__ == "__main__":
     run_inference(count=10)
